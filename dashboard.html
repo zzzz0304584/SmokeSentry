@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmokeSentry AI — 管理後台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1420;
+    --surface2: #111d2e;
+    --border: rgba(0,180,255,0.12);
+    --accent: #00b4ff;
+    --accent2: #ff3a5c;
+    --accent3: #00ffa3;
+    --text: #e8f4ff;
+    --text-muted: #6b8aaa;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Noto Sans TC', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --safe: #00ffa3;
+    --warn: #ffb800;
+    --danger: #ff3a5c;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); display:flex; height:100vh; overflow:hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 0;
+  }
+  .sidebar-logo {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 800;
+    padding: 0 1.5rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+  }
+  .sidebar-logo span { color: var(--accent); }
+
+  .sidebar-section {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    padding: 0.5rem 1.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.65rem 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { background: rgba(0,180,255,0.05); color: var(--text); }
+  .nav-item.active { background: rgba(0,180,255,0.08); color: var(--accent); border-left-color: var(--accent); }
+  .nav-item .ni-icon { font-size: 1rem; }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--danger);
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 10px;
+  }
+
+  .sidebar-status {
+    margin-top: auto;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+  .sys-online {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--safe);
+  }
+  .sys-online::before {
+    content:'';
+    width:6px;height:6px;
+    background:var(--safe);
+    border-radius:50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  /* MAIN */
+  .main { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+  .main::-webkit-scrollbar { width:4px; }
+  .main::-webkit-scrollbar-thumb { background:var(--border); }
+
+  /* TOP BAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,16,0.8);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-shrink: 0;
+  }
+  .topbar-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .topbar-right { display:flex; align-items:center; gap:1rem; }
+  .topbar-time {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .alert-bell {
+    position: relative;
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
+  .bell-badge {
+    position: absolute;
+    top:-4px;right:-4px;
+    width:14px;height:14px;
+    background:var(--danger);
+    border-radius:50%;
+    font-family:var(--font-mono);
+    font-size:0.55rem;
+    color:white;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .back-btn {
+    padding: 0.4rem 1rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .back-btn:hover { border-color:var(--accent);color:var(--accent); }
+
+  /* CONTENT */
+  .content { padding: 1.5rem 2rem; flex:1; }
+
+  /* STAT CARDS */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1.2rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .stat-card:hover { border-color: rgba(0,180,255,0.3); }
+  .stat-card::after {
+    content:'';
+    position:absolute;
+    top:0;right:0;
+    width:40%;height:2px;
+    background:var(--accent);
+  }
+  .stat-card.danger::after { background:var(--danger); }
+  .stat-card.warn::after { background:var(--warn); }
+  .stat-card.safe::after { background:var(--safe); }
+
+  .sc-label { font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted);letter-spacing:0.08em;margin-bottom:0.5rem; }
+  .sc-value { font-family:var(--font-display);font-size:2rem;font-weight:800;line-height:1; }
+  .sc-sub { font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;font-family:var(--font-mono); }
+  .sc-trend { position:absolute;bottom:1rem;right:1rem;font-family:var(--font-mono);font-size:0.7rem; }
+  .trend-up { color:var(--danger); }
+  .trend-down { color:var(--safe); }
+
+  /* GRID LAYOUT */
+  .grid-2-1 { display:grid;grid-template-columns:1fr 340px;gap:1rem;margin-bottom:1rem; }
+  .grid-3 { display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem; }
+  .grid-2 { display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .card-header {
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0.9rem 1.2rem;
+    border-bottom:1px solid var(--border);
+    background:var(--surface2);
+  }
+  .card-title {
+    font-family:var(--font-mono);
+    font-size:0.7rem;
+    color:var(--text-muted);
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+  }
+  .card-body { padding:1.2rem; }
+
+  /* CAMERA GRID */
+  .cam-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border); }
+  .cam-cell {
+    background:var(--bg);
+    position:relative;
+    cursor:pointer;
+    overflow:hidden;
+  }
+  .cam-cell canvas { width:100%;display:block; }
+  .cam-label {
+    position:absolute;top:6px;left:6px;
+    background:rgba(8,12,16,0.8);
+    font-family:var(--font-mono);font-size:0.62rem;
+    padding:2px 8px;color:var(--text-muted);
+    backdrop-filter:blur(4px);
+  }
+  .cam-status {
+    position:absolute;top:6px;right:6px;
+    font-family:var(--font-mono);font-size:0.62rem;
+    padding:2px 8px;
+  }
+  .cs-live { background:rgba(255,58,92,0.15);border:1px solid var(--danger);color:var(--danger); }
+  .cs-alert { background:rgba(255,58,92,0.3);border:1px solid var(--danger);color:var(--danger);animation:blink 1s step-end infinite; }
+  .cs-ok { background:rgba(0,255,163,0.1);border:1px solid var(--safe);color:var(--safe); }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+  /* CHART */
+  .chart-area {
+    padding:1rem;
+    position:relative;
+  }
+  canvas.chart { width:100%!important; }
+
+  /* EVENT TABLE */
+  .event-table { width:100%;border-collapse:collapse; }
+  .event-table th {
+    font-family:var(--font-mono);font-size:0.62rem;
+    color:var(--text-muted);letter-spacing:0.08em;
+    padding:0.5rem 1rem;text-align:left;
+    border-bottom:1px solid var(--border);
+    background:var(--surface2);
+  }
+  .event-table td {
+    padding:0.65rem 1rem;font-size:0.82rem;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+  }
+  .event-table tr:hover td { background:rgba(0,180,255,0.03); }
+  .badge {
+    display:inline-block;
+    padding:0.15rem 0.5rem;
+    font-family:var(--font-mono);font-size:0.62rem;
+    border-radius:2px;
+  }
+  .badge-danger { background:rgba(255,58,92,0.15);color:var(--danger);border:1px solid rgba(255,58,92,0.3); }
+  .badge-warn { background:rgba(255,184,0,0.15);color:var(--warn);border:1px solid rgba(255,184,0,0.3); }
+  .badge-safe { background:rgba(0,255,163,0.1);color:var(--safe);border:1px solid rgba(0,255,163,0.2); }
+
+  /* HEATMAP */
+  .heatmap-grid {
+    display:grid;
+    grid-template-columns: 40px repeat(8,1fr);
+    gap:2px;
+    font-family:var(--font-mono);
+    font-size:0.6rem;
+  }
+  .hm-cell {
+    aspect-ratio:1;
+    border-radius:2px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:0.55rem;
+    color:rgba(255,255,255,0.6);
+    transition:opacity 0.2s;
+    cursor:default;
+  }
+  .hm-label { color:var(--text-muted);display:flex;align-items:center;justify-content:flex-end;padding-right:4px;aspect-ratio:unset; }
+  .hm-header { color:var(--text-muted);display:flex;align-items:center;justify-content:center;aspect-ratio:unset;height:20px; }
+
+  /* SENSOR REAL-TIME */
+  .sensor-widget {
+    display:flex;flex-direction:column;gap:0.8rem;
+  }
+  .sw-item {
+    display:flex;align-items:center;gap:1rem;
+  }
+  .sw-icon { font-size:1.3rem;width:32px;text-align:center;flex-shrink:0; }
+  .sw-info { flex:1; }
+  .sw-label { font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);margin-bottom:0.2rem; }
+  .sw-val { font-family:var(--font-mono);font-size:1rem;font-weight:600; }
+  .sw-bar-track { height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:0.3rem;overflow:hidden; }
+  .sw-bar-fill { height:100%;border-radius:2px;transition:width 1s ease; }
+
+  /* LOCATION MAP */
+  .location-map {
+    width:100%;
+    background:#0a1218;
+    border:1px solid var(--border);
+    position:relative;
+    font-family:var(--font-mono);
+    font-size:0.65rem;
+  }
+  .floor-plan {
+    padding:1rem;
+    position:relative;
+  }
+  .building-outline {
+    width:100%;
+    max-width:300px;
+    margin:0 auto;
+    position:relative;
+    border:1px solid rgba(0,180,255,0.2);
+    background:rgba(0,180,255,0.02);
+    padding:1rem;
+  }
+  .room {
+    margin:4px;
+    border:1px solid rgba(0,180,255,0.15);
+    padding:0.5rem;
+    text-align:center;
+    color:var(--text-muted);
+    cursor:pointer;
+    transition:all 0.3s;
+    position:relative;
+  }
+  .room.hotspot { border-color:rgba(255,58,92,0.5);background:rgba(255,58,92,0.07); }
+  .room.hotspot-med { border-color:rgba(255,184,0,0.4);background:rgba(255,184,0,0.05); }
+  .hotspot-indicator {
+    position:absolute;top:-4px;right:-4px;
+    width:10px;height:10px;
+    border-radius:50%;
+    animation:pulse 2s infinite;
+  }
+  .hi-danger { background:var(--danger); }
+  .hi-warn { background:var(--warn); }
+
+  /* SCROLLBAR */
+  .scroll-area { max-height:300px;overflow-y:auto; }
+  .scroll-area::-webkit-scrollbar { width:3px; }
+  .scroll-area::-webkit-scrollbar-thumb { background:var(--border); }
+
+  @media(max-width:1100px) {
+    .grid-2-1 { grid-template-columns:1fr; }
+    .stat-row { grid-template-columns:repeat(2,1fr); }
+  }
+  @media(max-width:700px) {
+    .sidebar { display:none; }
+    .stat-row { grid-template-columns:1fr 1fr; }
+    .grid-3,.grid-2 { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-logo">Smoke<span>Sentry</span></div>
+
+  <div class="sidebar-section">// 監控</div>
+  <div class="nav-item active"><span class="ni-icon">📊</span> 總覽儀表板</div>
+  <div class="nav-item"><span class="ni-icon">📹</span> 即時攝影機 <span class="nav-badge">4</span></div>
+  <div class="nav-item"><span class="ni-icon">🚨</span> 警示管理 <span class="nav-badge" style="background:var(--danger)">3</span></div>
+
+  <div class="sidebar-section">// 分析</div>
+  <div class="nav-item"><span class="ni-icon">📈</span> 統計報表</div>
+  <div class="nav-item"><span class="ni-icon">🗺️</span> 熱點分析</div>
+  <div class="nav-item"><span class="ni-icon">📋</span> 違規紀錄</div>
+
+  <div class="sidebar-section">// 系統</div>
+  <div class="nav-item"><span class="ni-icon">⚙️</span> 系統設定</div>
+  <div class="nav-item"><span class="ni-icon">🔔</span> 通知設定</div>
+
+  <div class="sidebar-status">
+    <div class="sys-online">SYSTEM ONLINE</div>
+    <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted);margin-top:0.3rem">4/4 攝影機運作中</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-title">系統總覽儀表板</div>
+    <div class="topbar-right">
+      <div class="topbar-time" id="clockDisplay">--:--:--</div>
+      <div class="alert-bell">🔔<div class="bell-badge">3</div></div>
+      <a href="index.html" class="back-btn">← 返回主頁</a>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- STAT ROW -->
+    <div class="stat-row">
+      <div class="stat-card danger">
+        <div class="sc-label">TODAY ALERTS</div>
+        <div class="sc-value" style="color:var(--danger)" id="sc-alerts">23</div>
+        <div class="sc-sub">今日警示事件</div>
+        <div class="sc-trend trend-up">▲ +8 vs 昨日</div>
+      </div>
+      <div class="stat-card safe">
+        <div class="sc-label">ACCURACY</div>
+        <div class="sc-value" style="color:var(--safe)">94.2%</div>
+        <div class="sc-sub">辨識準確率</div>
+        <div class="sc-trend trend-down">▼ 誤判率 5.8%</div>
+      </div>
+      <div class="stat-card">
+        <div class="sc-label">CAMERAS</div>
+        <div class="sc-value" style="color:var(--accent)">4/4</div>
+        <div class="sc-sub">攝影機上線</div>
+        <div class="sc-trend" style="color:var(--safe)">● 全線正常</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="sc-label">MONTHLY</div>
+        <div class="sc-value" style="color:var(--warn)" id="sc-monthly">87</div>
+        <div class="sc-sub">本月累計違規</div>
+        <div class="sc-trend trend-down">▼ -12% vs 上月</div>
+      </div>
+    </div>
+
+    <!-- CAMERA GRID + SENSORS -->
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📹 即時監控畫面</div>
+          <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--safe)">● 4 cameras live</span>
+        </div>
+        <div class="cam-grid" id="camGrid">
+          <div class="cam-cell">
+            <canvas id="c1" height="120"></canvas>
+            <div class="cam-label">CAM-01 廁所外走廊 B棟</div>
+            <div class="cam-status cs-alert">● ALERT</div>
+          </div>
+          <div class="cam-cell">
+            <canvas id="c2" height="120"></canvas>
+            <div class="cam-label">CAM-02 樓梯間 A棟</div>
+            <div class="cam-status cs-live">● LIVE</div>
+          </div>
+          <div class="cam-cell">
+            <canvas id="c3" height="120"></canvas>
+            <div class="cam-label">CAM-03 宿舍公共空間</div>
+            <div class="cam-status cs-ok">● OK</div>
+          </div>
+          <div class="cam-cell">
+            <canvas id="c4" height="120"></canvas>
+            <div class="cam-label">CAM-04 校門口周邊</div>
+            <div class="cam-status cs-live">● LIVE</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <!-- Sensor Panel -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🌫️ 感測器即時數值</div>
+          </div>
+          <div class="card-body">
+            <div class="sensor-widget">
+              <div class="sw-item">
+                <div class="sw-icon">🌡️</div>
+                <div class="sw-info">
+                  <div class="sw-label">MQ-135 AIR QUALITY — CAM-01</div>
+                  <div class="sw-val" style="color:var(--danger)" id="aqi1">847 AQI</div>
+                  <div class="sw-bar-track"><div class="sw-bar-fill" id="aqib1" style="width:85%;background:var(--danger)"></div></div>
+                </div>
+              </div>
+              <div class="sw-item">
+                <div class="sw-icon">💨</div>
+                <div class="sw-info">
+                  <div class="sw-label">MQ-135 AIR QUALITY — CAM-02</div>
+                  <div class="sw-val" style="color:var(--warn)" id="aqi2">312 AQI</div>
+                  <div class="sw-bar-track"><div class="sw-bar-fill" id="aqib2" style="width:31%;background:var(--warn)"></div></div>
+                </div>
+              </div>
+              <div class="sw-item">
+                <div class="sw-icon">✅</div>
+                <div class="sw-info">
+                  <div class="sw-label">MQ-135 AIR QUALITY — CAM-03</div>
+                  <div class="sw-val" style="color:var(--safe)" id="aqi3">98 AQI</div>
+                  <div class="sw-bar-track"><div class="sw-bar-fill" id="aqib3" style="width:10%;background:var(--safe)"></div></div>
+                </div>
+              </div>
+              <div class="sw-item">
+                <div class="sw-icon">✅</div>
+                <div class="sw-info">
+                  <div class="sw-label">MQ-135 AIR QUALITY — CAM-04</div>
+                  <div class="sw-val" style="color:var(--safe)" id="aqi4">115 AQI</div>
+                  <div class="sw-bar-track"><div class="sw-bar-fill" id="aqib4" style="width:12%;background:var(--safe)"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚡ 快速操作</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:0.5rem;">
+            <button onclick="broadcastAlert()" style="padding:0.6rem;background:rgba(255,58,92,0.1);border:1px solid rgba(255,58,92,0.3);color:var(--danger);font-family:var(--font-mono);font-size:0.75rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,58,92,0.2)'" onmouseout="this.style.background='rgba(255,58,92,0.1)'">🔊 全區廣播警示</button>
+            <button onclick="exportReport()" style="padding:0.6rem;background:rgba(0,180,255,0.07);border:1px solid var(--border);color:var(--accent);font-family:var(--font-mono);font-size:0.75rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">📥 匯出今日報表</button>
+            <button style="padding:0.6rem;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-family:var(--font-mono);font-size:0.75rem;cursor:pointer;">📧 通知校方管理員</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHART + HEATMAP -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📈 24小時違規趨勢</div>
+          <span style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted)">今日</span>
+        </div>
+        <div class="chart-area">
+          <canvas id="trendChart" height="160"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🗺️ 時段熱點分析</div>
+          <span style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted)">本週</span>
+        </div>
+        <div class="card-body">
+          <div class="heatmap-grid" id="heatmap"></div>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.8rem;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-muted);">
+            <span>少</span>
+            <div style="height:8px;flex:1;background:linear-gradient(90deg,rgba(0,180,255,0.05),rgba(255,58,92,0.8));border-radius:2px;"></div>
+            <span>多</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENT LOG TABLE -->
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div class="card-title">📋 近期違規事件紀錄</div>
+        <span style="font-family:var(--font-mono);font-size:0.62rem;color:var(--accent);cursor:pointer;">查看全部 →</span>
+      </div>
+      <div class="scroll-area">
+        <table class="event-table">
+          <thead>
+            <tr>
+              <th>時間</th>
+              <th>攝影機</th>
+              <th>地點</th>
+              <th>類型</th>
+              <th>信心度</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="eventTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+// ── Clock ──
+function updateClock() {
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  document.getElementById('clockDisplay').textContent = t;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Mini cameras ──
+const camConfigs = [
+  { id:'c1', state:'smoking', color:'255,58,92' },
+  { id:'c2', state:'lighting', color:'255,184,0' },
+  { id:'c3', state:'normal', color:'0,255,163' },
+  { id:'c4', state:'normal', color:'0,180,255' },
+];
+
+camConfigs.forEach(cfg => {
+  const canvas = document.getElementById(cfg.id);
+  const ctx = canvas.getContext('2d');
+  let f = Math.random()*100;
+  let particles = [];
+
+  function draw() {
+    const W = canvas.offsetWidth || 200;
+    const H = 120;
+    canvas.width = W; canvas.height = H;
+
+    ctx.fillStyle = '#050a0f';
+    ctx.fillRect(0,0,W,H);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(0,180,255,0.04)';
+    ctx.lineWidth=0.5;
+    for(let x=0;x<W;x+=20){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+    // Person
+    const px=W*0.42, py=H*0.12;
+    const bw=W*0.1, bh=H*0.65;
+    ctx.fillStyle='rgba(255,210,170,0.7)';
+    ctx.beginPath();ctx.arc(px+bw/2,py+bw*0.5,bw*0.5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(60,80,130,0.7)';
+    ctx.fillRect(px,py+bw+2,bw,bh*0.55);
+    ctx.fillStyle='rgba(40,50,80,0.7)';
+    ctx.fillRect(px,py+bw+bh*0.55+2,bw*0.45,bh*0.35);
+    ctx.fillRect(px+bw*0.55,py+bw+bh*0.55+2,bw*0.45,bh*0.35);
+
+    // Arm
+    const aa = cfg.state==='smoking'||cfg.state==='lighting' ? -0.9+Math.sin(f*0.05)*0.15 : -0.2;
+    ctx.strokeStyle='rgba(60,80,130,0.8)';ctx.lineWidth=bw*0.35;ctx.lineCap='round';
+    const ax=px+bw, ay=py+bw+bh*0.15;
+    ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax+Math.cos(aa)*W*0.09,ay+Math.sin(aa)*H*0.12);ctx.stroke();
+
+    if(cfg.state==='smoking'||cfg.state==='lighting') {
+      const ex=ax+Math.cos(aa)*W*0.09, ey=ay+Math.sin(aa)*H*0.12;
+      // cig
+      ctx.strokeStyle='#f0ebe0';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(ex+W*0.04,ey-H*0.03);ctx.stroke();
+      const ea=0.4+Math.sin(f*0.15)*0.5;
+      ctx.fillStyle=`rgba(255,${cfg.state==='lighting'?180:80},20,${ea})`;
+      ctx.beginPath();ctx.arc(ex+W*0.04,ey-H*0.03,2,0,Math.PI*2);ctx.fill();
+      if(f%5===0) particles.push({x:ex+W*0.04,y:ey-H*0.03,vx:(Math.random()-0.5)*0.3,vy:-0.6,life:1,size:2});
+    }
+
+    particles=particles.filter(p=>p.life>0);
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life-=0.025;p.size*=1.015;
+      ctx.globalAlpha=p.life*0.2;ctx.fillStyle='rgba(180,200,220,0.5)';
+      ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;});
+
+    // Detection box
+    if(cfg.state!=='normal') {
+      const alpha=0.6+Math.sin(f*0.1)*0.4;
+      ctx.strokeStyle=`rgba(${cfg.color},${alpha})`;ctx.lineWidth=1.5;
+      ctx.strokeRect(px-3,py-3,bw+6,bh+10);
+    }
+
+    // Scan
+    const sy=(f*2)%H;
+    const sg=ctx.createLinearGradient(0,sy-6,0,sy+6);
+    sg.addColorStop(0,'transparent');sg.addColorStop(0.5,`rgba(${cfg.color},0.2)`);sg.addColorStop(1,'transparent');
+    ctx.fillStyle=sg;ctx.fillRect(0,sy-6,W,12);
+
+    f++;
+    requestAnimationFrame(draw);
+  }
+  draw();
+});
+
+// ── Trend Chart ──
+function drawTrendChart() {
+  const canvas = document.getElementById('trendChart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.parentElement.clientWidth - 32;
+  const H = 160;
+  canvas.width = W; canvas.height = H;
+
+  const hours = Array.from({length:24},(_,i)=>i);
+  const data = [0,0,1,0,0,1,2,3,5,4,3,6,4,7,5,3,6,8,4,5,3,2,1,0];
+  const max = Math.max(...data);
+
+  const pad = {top:15,bottom:30,left:30,right:15};
+  const cw = W-pad.left-pad.right;
+  const ch = H-pad.top-pad.bottom;
+
+  // Grid lines
+  ctx.strokeStyle='rgba(0,180,255,0.06)';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++) {
+    const y=pad.top+ch*(1-i/4);
+    ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke();
+    ctx.fillStyle='rgba(0,180,255,0.4)';ctx.font='9px JetBrains Mono, monospace';
+    ctx.fillText(Math.round(max*i/4), 2, y+4);
+  }
+
+  // Area fill
+  const grad = ctx.createLinearGradient(0,pad.top,0,H-pad.bottom);
+  grad.addColorStop(0,'rgba(255,58,92,0.25)');
+  grad.addColorStop(1,'rgba(255,58,92,0.0)');
+
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = pad.left + (i/23)*cw;
+    const y = pad.top + ch*(1-v/max);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.left+cw, H-pad.bottom);
+  ctx.lineTo(pad.left, H-pad.bottom);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle='var(--danger, #ff3a5c)';ctx.lineWidth=2;ctx.lineJoin='round';
+  data.forEach((v,i) => {
+    const x = pad.left + (i/23)*cw;
+    const y = pad.top + ch*(1-v/max);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // Dots for peaks
+  data.forEach((v,i) => {
+    if(v >= 5) {
+      const x = pad.left + (i/23)*cw;
+      const y = pad.top + ch*(1-v/max);
+      ctx.fillStyle='#ff3a5c';
+      ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();
+    }
+  });
+
+  // X axis labels
+  ctx.fillStyle='rgba(107,138,170,0.8)';ctx.font='9px JetBrains Mono, monospace';
+  [0,4,8,12,16,20,23].forEach(i=>{
+    const x=pad.left+(i/23)*cw;
+    ctx.fillText(`${i}:00`,x-12,H-8);
+  });
+}
+
+window.addEventListener('load', () => { setTimeout(drawTrendChart, 100); });
+window.addEventListener('resize', drawTrendChart);
+
+// ── Heatmap ──
+function buildHeatmap() {
+  const hm = document.getElementById('heatmap');
+  const days = ['週一','週二','週三','週四','週五','週六','週日'];
+  const slots = ['07-09','09-11','11-13','13-15','15-17','17-19','19-21','21-23'];
+  const rawData = [
+    [1,2,3,5,4,2,1,0],
+    [0,1,2,8,6,3,1,0],
+    [2,3,4,6,7,4,2,1],
+    [1,2,3,7,5,3,1,0],
+    [0,1,2,4,3,2,1,0],
+    [3,5,7,8,6,4,2,1],
+    [2,4,6,5,3,1,0,0],
+  ];
+  const max = 8;
+
+  // Header row
+  const corner = document.createElement('div');corner.className='hm-header';hm.appendChild(corner);
+  slots.forEach(s=>{
+    const h=document.createElement('div');h.className='hm-header';
+    h.textContent=s.split('-')[0];hm.appendChild(h);
+  });
+
+  days.forEach((day,di)=>{
+    const label=document.createElement('div');label.className='hm-label';label.textContent=day;hm.appendChild(label);
+    rawData[di].forEach((v,si)=>{
+      const cell=document.createElement('div');cell.className='hm-cell';
+      const intensity=v/max;
+      const r=Math.round(intensity*255);
+      const g=Math.round(58+intensity*(0-58));
+      const b=Math.round(92+intensity*(0-92));
+      cell.style.background=`rgba(${r},${g},${b},${0.1+intensity*0.85})`;
+      if(v>0)cell.textContent=v;
+      cell.title=`${day} ${slots[si]}: ${v}件`;
+      hm.appendChild(cell);
+    });
+  });
+}
+buildHeatmap();
+
+// ── Event Table ──
+const events = [
+  { time:'14:32:07', cam:'CAM-01', loc:'廁所外走廊 B棟', type:'吸菸', conf:94, status:'已警示' },
+  { time:'14:18:43', cam:'CAM-02', loc:'樓梯間 A棟', type:'點煙', conf:88, status:'已警示' },
+  { time:'13:55:21', cam:'CAM-01', loc:'廁所外走廊 B棟', type:'吸菸', conf:91, status:'已警示' },
+  { time:'13:22:09', cam:'CAM-04', loc:'校門口周邊', type:'吸菸', conf:96, status:'已通報' },
+  { time:'12:48:33', cam:'CAM-02', loc:'樓梯間 A棟', type:'點煙', conf:79, status:'已警示' },
+  { time:'12:15:57', cam:'CAM-03', loc:'宿舍公共空間', type:'疑似', conf:62, status:'觀察中' },
+  { time:'11:42:18', cam:'CAM-01', loc:'廁所外走廊 B棟', type:'吸菸', conf:97, status:'已通報' },
+  { time:'10:33:44', cam:'CAM-02', loc:'樓梯間 A棟', type:'吸菸', conf:89, status:'已警示' },
+];
+
+const tbody = document.getElementById('eventTableBody');
+events.forEach(e => {
+  const typeClass = e.type==='吸菸'?'badge-danger':e.type==='點煙'?'badge-warn':'badge-safe';
+  const stClass = e.status==='已通報'?'badge-danger':e.status==='已警示'?'badge-warn':'badge-safe';
+  const confColor = e.conf>=90?'var(--safe)':e.conf>=75?'var(--warn)':'var(--danger)';
+  tbody.innerHTML += `
+    <tr>
+      <td style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted)">${e.time}</td>
+      <td style="font-family:var(--font-mono);font-size:0.78rem;color:var(--accent)">${e.cam}</td>
+      <td style="font-size:0.82rem">${e.loc}</td>
+      <td><span class="badge ${typeClass}">${e.type}</span></td>
+      <td style="font-family:var(--font-mono);font-size:0.78rem;color:${confColor}">${e.conf}%</td>
+      <td><span class="badge ${stClass}">${e.status}</span></td>
+    </tr>`;
+});
+
+// ── Quick actions ──
+function broadcastAlert() {
+  const btn = event.target;
+  const orig = btn.textContent;
+  btn.textContent = '📢 廣播已發送！';
+  btn.style.background='rgba(255,58,92,0.3)';
+  setTimeout(()=>{btn.textContent=orig;btn.style.background='rgba(255,58,92,0.1)';},3000);
+}
+function exportReport() {
+  const rows = [['時間','攝影機','地點','類型','信心度','狀態'],...events.map(e=>[e.time,e.cam,e.loc,e.type,e.conf+'%',e.status])];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `SmokeSentry_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+}
+
+// ── Sensor simulation ──
+function jitter(base, range) { return Math.round(base + (Math.random()-0.5)*range); }
+setInterval(()=>{
+  const v1=jitter(847,40), v2=jitter(312,60), v3=jitter(98,15), v4=jitter(115,20);
+  const set=(id,bid,val,max)=>{
+    const el=document.getElementById(id); const bar=document.getElementById(bid);
+    if(el)el.textContent=val+' AQI';
+    if(bar)bar.style.width=Math.min(val/max*100,100)+'%';
+  };
+  set('aqi1','aqib1',v1,1000);
+  set('aqi2','aqib2',v2,1000);
+  set('aqi3','aqib3',v3,1000);
+  set('aqi4','aqib4',v4,1000);
+}, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmokeSentry AI — 校園吸煙智慧辨識系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1420;
+    --surface2: #111d2e;
+    --border: rgba(0,180,255,0.12);
+    --accent: #00b4ff;
+    --accent2: #ff3a5c;
+    --accent3: #00ffa3;
+    --text: #e8f4ff;
+    --text-muted: #6b8aaa;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Noto Sans TC', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --safe: #00ffa3;
+    --warn: #ffb800;
+    --danger: #ff3a5c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+
+  /* NOISE TEXTURE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.4;
+  }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 3rem;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(8,12,16,0.85);
+    backdrop-filter: blur(20px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+
+  .nav-links { display: flex; gap: 2rem; list-style: none; }
+  .nav-links a {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  .btn-nav {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 0.5rem 1.4rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  }
+  .btn-nav:hover { background: #33c4ff; transform: translateY(-1px); }
+
+  /* HERO */
+  .hero {
+    min-height: 92vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    align-items: center;
+    padding: 4rem 3rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(0,180,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -100px; left: 20%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(255,58,92,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-text { position: relative; z-index: 2; }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(0,180,255,0.1);
+    border: 1px solid rgba(0,180,255,0.25);
+    padding: 0.35rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 2rem;
+  }
+  .badge-dot {
+    width: 6px; height: 6px;
+    background: var(--accent3);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.8rem, 5vw, 4.5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.5rem;
+  }
+  h1 .line2 { color: var(--accent); }
+  h1 .line3 { color: var(--text-muted); font-weight: 400; font-size: 0.6em; display: block; margin-top: 0.3em; }
+
+  .hero-desc {
+    color: var(--text-muted);
+    line-height: 1.8;
+    font-size: 1rem;
+    max-width: 480px;
+    margin-bottom: 2.5rem;
+  }
+
+  .hero-cta { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 0.9rem 2.2rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.25s;
+    clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .btn-primary:hover { background: #33c4ff; transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,180,255,0.3); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.9rem 2.2rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.25s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* HERO VISUAL */
+  .hero-visual {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .camera-frame {
+    width: 100%;
+    max-width: 520px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cam-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .cam-live {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--danger);
+    font-weight: 600;
+  }
+  .cam-live::before {
+    content: '';
+    width: 7px; height: 7px;
+    background: var(--danger);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+
+  .cam-view {
+    width: 100%;
+    aspect-ratio: 16/10;
+    background: #050a0f;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* SIMULATED SCENE */
+  .scene-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(135deg, #050a0f 0%, #0a1420 50%, #050a0f 100%);
+  }
+
+  .grid-lines {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+
+  /* Person silhouette */
+  .person {
+    position: absolute;
+    bottom: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+  }
+
+  .person-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .p-head {
+    width: 22px; height: 22px;
+    background: rgba(255,220,180,0.7);
+    border-radius: 50%;
+  }
+  .p-torso {
+    width: 30px; height: 45px;
+    background: rgba(60,80,120,0.8);
+    border-radius: 3px;
+  }
+  .p-arm {
+    position: absolute;
+    top: 38px; right: -18px;
+    width: 20px; height: 8px;
+    background: rgba(60,80,120,0.8);
+    border-radius: 4px;
+    transform-origin: left center;
+    transform: rotate(-40deg);
+    animation: armMove 3s ease-in-out infinite;
+  }
+  @keyframes armMove {
+    0%, 100% { transform: rotate(-40deg); }
+    50% { transform: rotate(-70deg); }
+  }
+
+  /* Detection box */
+  .detect-box {
+    position: absolute;
+    border: 2px solid var(--danger);
+    animation: detectPulse 2s ease-in-out infinite;
+  }
+  @keyframes detectPulse {
+    0%, 100% { border-color: var(--danger); box-shadow: 0 0 10px rgba(255,58,92,0.3); }
+    50% { border-color: #ff6b85; box-shadow: 0 0 20px rgba(255,58,92,0.5); }
+  }
+
+  .detect-label {
+    position: absolute;
+    top: -22px; left: 0;
+    background: var(--danger);
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    padding: 2px 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .detect-corner {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-color: var(--danger);
+    border-style: solid;
+  }
+  .dc-tl { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+  .dc-tr { top: -2px; right: -2px; border-width: 2px 2px 0 0; }
+  .dc-bl { bottom: -2px; left: -2px; border-width: 0 0 2px 2px; }
+  .dc-br { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+
+  /* Smoke effect */
+  .smoke-particle {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,220,255,0.15), transparent);
+    animation: smokeRise linear infinite;
+    pointer-events: none;
+  }
+  @keyframes smokeRise {
+    0% { transform: translateY(0) scale(1); opacity: 0.6; }
+    100% { transform: translateY(-80px) scale(3); opacity: 0; }
+  }
+
+  /* Scan line */
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,180,255,0.5), transparent);
+    animation: scanMove 4s linear infinite;
+  }
+  @keyframes scanMove {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+
+  /* HUD overlays */
+  .hud-tl {
+    position: absolute;
+    top: 10px; left: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: rgba(0,180,255,0.7);
+    line-height: 1.6;
+  }
+  .hud-tr {
+    position: absolute;
+    top: 10px; right: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: rgba(0,180,255,0.7);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .hud-br {
+    position: absolute;
+    bottom: 10px; right: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--danger);
+    text-align: right;
+    animation: alertBlink 1s step-end infinite;
+  }
+  @keyframes alertBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Sensor bar */
+  .sensor-bar {
+    padding: 0.6rem 1rem;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .sensor-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .sensor-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+  .sensor-value {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+  .sv-danger { color: var(--danger); }
+  .sv-warn { color: var(--warn); }
+  .sv-safe { color: var(--safe); }
+
+  .sensor-bar-track {
+    height: 3px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .sensor-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  /* STATS STRIP */
+  .stats-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-cell {
+    padding: 2rem 2rem;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-number {
+    font-family: var(--font-display);
+    font-size: 2.8rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.3rem;
+    font-family: var(--font-mono);
+  }
+
+  /* SECTION */
+  section { padding: 5rem 3rem; }
+
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 3vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 1rem;
+    line-height: 1.1;
+  }
+  .section-desc {
+    color: var(--text-muted);
+    max-width: 540px;
+    line-height: 1.8;
+    font-size: 0.95rem;
+  }
+
+  /* HOW IT WORKS */
+  .flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .flow-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  .flow-card:hover { border-color: rgba(0,180,255,0.35); }
+
+  .flow-num {
+    font-family: var(--font-display);
+    font-size: 4rem;
+    font-weight: 800;
+    color: rgba(0,180,255,0.07);
+    line-height: 1;
+    position: absolute;
+    top: 1rem; right: 1.2rem;
+  }
+
+  .flow-icon {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+  }
+
+  .flow-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+  }
+  .flow-desc {
+    color: var(--text-muted);
+    font-size: 0.87rem;
+    line-height: 1.7;
+  }
+
+  .flow-tags {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    padding: 0.2rem 0.6rem;
+    background: rgba(0,180,255,0.08);
+    border: 1px solid rgba(0,180,255,0.2);
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  /* DEMO SECTION */
+  #demo {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .demo-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 2rem;
+    margin-top: 3rem;
+  }
+
+  .demo-camera-wrapper {
+    background: #050a0f;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .demo-cam-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 1.2rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cam-selector {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .cam-btn {
+    padding: 0.25rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.03em;
+  }
+  .cam-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,180,255,0.07);
+  }
+  .cam-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .demo-view {
+    position: relative;
+    background: #050a0f;
+    aspect-ratio: 16/10;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .demo-view canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .demo-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* Alert popup */
+  .alert-popup {
+    position: absolute;
+    top: 1rem; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,58,92,0.15);
+    border: 1px solid var(--danger);
+    padding: 0.6rem 1.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--danger);
+    letter-spacing: 0.05em;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.5s;
+    backdrop-filter: blur(10px);
+  }
+  .alert-popup.show { opacity: 1; }
+
+  /* Panel */
+  .demo-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .panel-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 1.2rem;
+  }
+
+  .panel-title {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Status indicators */
+  .status-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.83rem;
+  }
+  .status-key { color: var(--text-muted); }
+  .status-val {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+
+  .dot-safe { color: var(--safe); }
+  .dot-danger { color: var(--danger); }
+  .dot-warn { color: var(--warn); }
+
+  /* Confidence meter */
+  .conf-meter {
+    margin-top: 0.3rem;
+  }
+  .conf-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+  }
+  .conf-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+  }
+  .conf-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+  .cf-blue { background: linear-gradient(90deg, #0059a1, var(--accent)); }
+  .cf-green { background: linear-gradient(90deg, #007a4d, var(--safe)); }
+  .cf-red { background: linear-gradient(90deg, #a1001f, var(--danger)); }
+
+  /* Event log */
+  .event-log {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .event-log::-webkit-scrollbar { width: 3px; }
+  .event-log::-webkit-scrollbar-track { background: transparent; }
+  .event-log::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-entry {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    font-size: 0.78rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    animation: logSlide 0.3s ease;
+  }
+  @keyframes logSlide {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .log-time { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; }
+  .log-msg { color: var(--text); line-height: 1.4; }
+  .log-danger { color: var(--danger); }
+  .log-warn { color: var(--warn); }
+  .log-safe { color: var(--safe); }
+
+  /* Control buttons */
+  .demo-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    flex: 1;
+    padding: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+    min-width: 80px;
+  }
+  .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ctrl-btn.trigger-smoke { border-color: rgba(255,58,92,0.4); color: var(--danger); }
+  .ctrl-btn.trigger-smoke:hover { background: rgba(255,58,92,0.1); }
+
+  /* FEATURES */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 50px 1fr;
+    gap: 1.2rem;
+    align-items: start;
+    transition: all 0.3s;
+  }
+  .feature-card:hover {
+    border-color: rgba(0,180,255,0.3);
+    transform: translateY(-2px);
+  }
+
+  .feature-icon-box {
+    width: 48px; height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    background: rgba(0,180,255,0.07);
+    border: 1px solid var(--border);
+  }
+
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  .feature-desc {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.7;
+  }
+
+  /* ARCHITECTURE */
+  .arch-diagram {
+    margin-top: 3rem;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .arch-layer {
+    flex: 1;
+    padding: 2rem 1.5rem;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+  .arch-layer:last-child { border-right: none; }
+
+  .arch-layer-tag {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+    display: block;
+  }
+
+  .arch-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .arch-item-icon { font-size: 0.9rem; }
+
+  .arch-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    color: var(--accent);
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 3rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .footer-copy {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.5rem;
+    list-style: none;
+  }
+  .footer-links a {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--accent); }
+
+  /* ANIMATIONS */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; padding: 3rem 1.5rem; }
+    .hero-visual { display: none; }
+    .stats-strip { grid-template-columns: repeat(2,1fr); }
+    .flow-grid { grid-template-columns: 1fr; }
+    .demo-layout { grid-template-columns: 1fr; }
+    .demo-panel { display: none; }
+    .features-grid { grid-template-columns: 1fr; }
+    .arch-diagram { flex-direction: column; }
+    .arch-layer { border-right: none; border-bottom: 1px solid var(--border); }
+    nav { padding: 1rem 1.5rem; }
+    .nav-links { display: none; }
+    section { padding: 3rem 1.5rem; }
+    footer { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Smoke<span>Sentry</span> AI</div>
+  <ul class="nav-links">
+    <li><a href="#demo">DEMO</a></li>
+    <li><a href="#how">原理</a></li>
+    <li><a href="#features">功能</a></li>
+    <li><a href="dashboard.html">管理後台</a></li>
+  </ul>
+  <button class="btn-nav" onclick="window.location='dashboard.html'">▶ 後台管理</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-text">
+    <div class="hero-badge">
+      <span class="badge-dot"></span>
+      SYSTEM ACTIVE — CAM-01 MONITORING
+    </div>
+    <h1>
+      校園吸煙<br>
+      <span class="line2">智慧辨識</span>
+      <span class="line3">多模態 AI · 即時預警 · 隱私保護</span>
+    </h1>
+    <p class="hero-desc">
+      結合 YOLOv8 影像辨識、MediaPipe 姿態估計與 MQ-135 煙霧感測，
+      打造三層式多模態校園吸煙行為智慧辨識預警系統，準確率提升超過 40%。
+    </p>
+    <div class="hero-cta">
+      <a href="#demo" class="btn-primary">▶ 觀看 DEMO</a>
+      <a href="dashboard.html" class="btn-secondary">📊 後台管理</a>
+    </div>
+  </div>
+
+  <div class="hero-visual">
+    <div class="camera-frame">
+      <div class="cam-header">
+        <span>CAM-01 / 廁所外走廊 B棟</span>
+        <span class="cam-live">● LIVE</span>
+      </div>
+      <div class="cam-view" id="heroCamView">
+        <div class="scene-bg"></div>
+        <div class="grid-lines"></div>
+        <div class="scan-line"></div>
+
+        <!-- Person -->
+        <div class="person">
+          <div class="person-body">
+            <div class="p-head"></div>
+            <div class="p-torso" style="position:relative">
+              <div class="p-arm"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Smoke particles -->
+        <div class="smoke-particle" style="width:20px;height:20px;top:35%;left:52%;animation-duration:2.5s;animation-delay:0s"></div>
+        <div class="smoke-particle" style="width:15px;height:15px;top:38%;left:54%;animation-duration:3s;animation-delay:0.7s"></div>
+        <div class="smoke-particle" style="width:18px;height:18px;top:36%;left:50%;animation-duration:2.8s;animation-delay:1.4s"></div>
+
+        <!-- Detection boxes -->
+        <div class="detect-box" style="top:18%;left:42%;width:18%;height:60%;">
+          <div class="detect-label">PERSON 97%</div>
+          <div class="detect-corner dc-tl"></div>
+          <div class="detect-corner dc-tr"></div>
+          <div class="detect-corner dc-bl"></div>
+          <div class="detect-corner dc-br"></div>
+        </div>
+        <div class="detect-box" style="top:38%;left:50%;width:10%;height:15%;border-color:var(--warn);">
+          <div class="detect-label" style="background:var(--warn);color:#000">CIGARETTE 89%</div>
+          <div class="detect-corner dc-tl" style="border-color:var(--warn)"></div>
+          <div class="detect-corner dc-tr" style="border-color:var(--warn)"></div>
+          <div class="detect-corner dc-bl" style="border-color:var(--warn)"></div>
+          <div class="detect-corner dc-br" style="border-color:var(--warn)"></div>
+        </div>
+
+        <!-- HUD -->
+        <div class="hud-tl">
+          FPS: 30<br>
+          MODEL: YOLOv8n<br>
+          RES: 640×400
+        </div>
+        <div class="hud-tr">
+          14:32:07<br>
+          CAM-01<br>
+          B棟-2F
+        </div>
+        <div class="hud-br">
+          ⚠ SMOKING DETECTED<br>
+          CONFIDENCE: 94.2%
+        </div>
+      </div>
+
+      <div class="sensor-bar">
+        <div class="sensor-item">
+          <div class="sensor-label">MQ-135 AIR QUALITY</div>
+          <div class="sensor-value sv-danger">847 AQI</div>
+          <div class="sensor-bar-track">
+            <div class="sensor-bar-fill" style="width:85%;background:var(--danger)"></div>
+          </div>
+        </div>
+        <div class="sensor-item">
+          <div class="sensor-label">SMOKE DENSITY</div>
+          <div class="sensor-value sv-warn">HIGH</div>
+          <div class="sensor-bar-track">
+            <div class="sensor-bar-fill" style="width:72%;background:var(--warn)"></div>
+          </div>
+        </div>
+        <div class="sensor-item">
+          <div class="sensor-label">CONFIDENCE</div>
+          <div class="sensor-value sv-safe">94.2%</div>
+          <div class="sensor-bar-track">
+            <div class="sensor-bar-fill" style="width:94%;background:var(--safe)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-cell">
+    <div class="stat-number" id="cnt1">0</div>
+    <div class="stat-label">今日偵測事件</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-number" id="cnt2">0</div>
+    <div class="stat-label">辨識準確率</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-number" id="cnt3">0</div>
+    <div class="stat-label">監控攝影機數</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-number" id="cnt4">0</div>
+    <div class="stat-label">本月累計違規</div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-tag">// HOW IT WORKS</div>
+  <h2 class="section-title">三層式智慧辨識流程</h2>
+  <p class="section-desc">從影像擷取到違規通報，全程自動化處理，平均反應時間小於 1.2 秒。</p>
+
+  <div class="flow-grid">
+    <div class="flow-card fade-in">
+      <div class="flow-num">01</div>
+      <div class="flow-icon">📷</div>
+      <div class="flow-title">INPUT 資料蒐集</div>
+      <div class="flow-desc">多路攝影機串流擷取公共區域影像，搭配 MQ-135 空氣品質感測器持續監測環境數據，雙管道資料並行輸入。</div>
+      <div class="flow-tags">
+        <span class="tag">WEBCAM</span>
+        <span class="tag">MQ-135</span>
+        <span class="tag">RTSP</span>
+        <span class="tag">IoT</span>
+      </div>
+    </div>
+
+    <div class="flow-card fade-in" style="transition-delay:0.1s">
+      <div class="flow-num">02</div>
+      <div class="flow-icon">🤖</div>
+      <div class="flow-title">AI 辨識層</div>
+      <div class="flow-desc">YOLOv8 進行物件偵測（人物、香菸），MediaPipe 分析手部與臉部關鍵點，多模態融合判斷消除誤報。</div>
+      <div class="flow-tags">
+        <span class="tag">YOLOv8</span>
+        <span class="tag">MediaPipe</span>
+        <span class="tag">Fusion</span>
+        <span class="tag">Edge AI</span>
+      </div>
+    </div>
+
+    <div class="flow-card fade-in" style="transition-delay:0.2s">
+      <div class="flow-num">03</div>
+      <div class="flow-icon">🚨</div>
+      <div class="flow-title">OUTPUT 預警管理</div>
+      <div class="flow-desc">即時廣播警示、自動臉部打碼後傳送後端、管理平台記錄完整違規時間軸，支援事後影像回放。</div>
+      <div class="flow-tags">
+        <span class="tag">ALERT</span>
+        <span class="tag">BLUR</span>
+        <span class="tag">Dashboard</span>
+        <span class="tag">Analytics</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INTERACTIVE DEMO -->
+<section id="demo">
+  <div class="section-tag">// INTERACTIVE DEMO</div>
+  <h2 class="section-title">即時辨識模擬</h2>
+  <p class="section-desc">點擊下方按鈕觸發不同情境，觀察系統如何進行多模態融合判斷。</p>
+
+  <div class="demo-layout">
+    <div>
+      <div class="demo-camera-wrapper">
+        <div class="demo-cam-header">
+          <div class="cam-selector">
+            <button class="cam-btn active" onclick="switchCam(this,'廁所外走廊 B棟')">CAM-01</button>
+            <button class="cam-btn" onclick="switchCam(this,'樓梯間 A棟')">CAM-02</button>
+            <button class="cam-btn" onclick="switchCam(this,'宿舍公共空間')">CAM-03</button>
+            <button class="cam-btn" onclick="switchCam(this,'校門口周邊')">CAM-04</button>
+          </div>
+          <span id="camLocation" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted)">廁所外走廊 B棟</span>
+        </div>
+        <div class="demo-view">
+          <canvas id="demoCanvas"></canvas>
+          <div class="demo-overlay">
+            <div class="alert-popup" id="alertPopup">⚠ 吸菸行為已偵測！廣播警示中...</div>
+          </div>
+        </div>
+        <div class="sensor-bar">
+          <div class="sensor-item">
+            <div class="sensor-label">MQ-135 AIR QUALITY</div>
+            <div class="sensor-value" id="aqiVal">120 AQI</div>
+            <div class="sensor-bar-track">
+              <div class="sensor-bar-fill cf-blue" id="aqiBar" style="width:12%"></div>
+            </div>
+          </div>
+          <div class="sensor-item">
+            <div class="sensor-label">SMOKE DENSITY</div>
+            <div class="sensor-value" id="smokeVal">LOW</div>
+            <div class="sensor-bar-track">
+              <div class="sensor-bar-fill cf-green" id="smokeBar" style="width:8%"></div>
+            </div>
+          </div>
+          <div class="sensor-item">
+            <div class="sensor-label">SYSTEM STATUS</div>
+            <div class="sensor-value sv-safe" id="sysStatus">MONITORING</div>
+            <div class="sensor-bar-track">
+              <div class="sensor-bar-fill cf-green" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:0.8rem 1.2rem;background:var(--surface2);border-top:1px solid var(--border)">
+          <div class="demo-controls">
+            <button class="ctrl-btn" onclick="triggerScenario('normal')">😐 正常行走</button>
+            <button class="ctrl-btn" onclick="triggerScenario('eating')">🍔 吃東西（誤判測試）</button>
+            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('smoking')">🚬 觸發吸煙場景</button>
+            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('lighting')">🔥 點煙偵測</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-panel">
+      <div class="panel-card">
+        <div class="panel-title">📡 辨識狀態</div>
+        <div class="status-list">
+          <div class="status-row">
+            <span class="status-key">人物偵測</span>
+            <span class="status-val dot-safe" id="st-person">● 偵測到 1 人</span>
+          </div>
+          <div class="status-row">
+            <span class="status-key">香菸偵測</span>
+            <span class="status-val dot-warn" id="st-cig">○ 未偵測</span>
+          </div>
+          <div class="status-row">
+            <span class="status-key">手部動作</span>
+            <span class="status-val" id="st-pose" style="color:var(--text-muted)">○ 正常</span>
+          </div>
+          <div class="status-row">
+            <span class="status-key">煙霧感測</span>
+            <span class="status-val dot-safe" id="st-smoke">● 正常</span>
+          </div>
+          <div class="status-row">
+            <span class="status-key">融合判斷</span>
+            <span class="status-val dot-safe" id="st-fusion" style="font-weight:600">— 安全</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-title">📊 信心度</div>
+        <div class="conf-meter">
+          <div class="conf-label"><span>YOLOv8 物件</span><span id="cv-yolo">0%</span></div>
+          <div class="conf-track"><div class="conf-fill cf-blue" id="cb-yolo" style="width:0%"></div></div>
+
+          <div class="conf-label"><span>姿態判斷</span><span id="cv-pose">0%</span></div>
+          <div class="conf-track"><div class="conf-fill cf-green" id="cb-pose" style="width:0%"></div></div>
+
+          <div class="conf-label"><span>感測器</span><span id="cv-sensor">0%</span></div>
+          <div class="conf-track"><div class="conf-fill cf-red" id="cb-sensor" style="width:0%"></div></div>
+
+          <div class="conf-label" style="margin-top:0.5rem;color:var(--text)"><span>綜合信心度</span><span id="cv-total" style="color:var(--accent)">0%</span></div>
+          <div class="conf-track" style="height:8px"><div class="conf-fill" id="cb-total" style="width:0%;background:linear-gradient(90deg,#003d6b,var(--accent))"></div></div>
+        </div>
+      </div>
+
+      <div class="panel-card" style="flex:1">
+        <div class="panel-title">📋 事件紀錄</div>
+        <div class="event-log" id="eventLog">
+          <div class="log-entry">
+            <span class="log-time">14:28:03</span>
+            <span class="log-msg log-safe">系統啟動，監控開始</span>
+          </div>
+          <div class="log-entry">
+            <span class="log-time">14:29:11</span>
+            <span class="log-msg">CAM-01 偵測到 1 人進入範圍</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-tag">// FEATURES</div>
+  <h2 class="section-title">系統核心功能</h2>
+
+  <div class="features-grid">
+    <div class="feature-card fade-in">
+      <div class="feature-icon-box">🎯</div>
+      <div>
+        <div class="feature-title">多模態融合判斷</div>
+        <div class="feature-desc">影像、行為姿態、氣體感測器三路資料並行分析，相互驗證降低誤判率，準確率較單一影像方案提升約 40%。</div>
+      </div>
+    </div>
+    <div class="feature-card fade-in" style="transition-delay:0.1s">
+      <div class="feature-icon-box">⚡</div>
+      <div>
+        <div class="feature-title">即時預警廣播</div>
+        <div class="feature-desc">偵測到吸菸行為後 1.2 秒內觸發廣播警示，主動嚇阻違規行為，無需人工介入。</div>
+      </div>
+    </div>
+    <div class="feature-card fade-in" style="transition-delay:0.15s">
+      <div class="feature-icon-box">🔒</div>
+      <div>
+        <div class="feature-title">隱私保護打碼</div>
+        <div class="feature-desc">非違規者自動臉部模糊處理，僅保留違規畫面傳送後端，符合個人資料保護法規要求。</div>
+      </div>
+    </div>
+    <div class="feature-card fade-in" style="transition-delay:0.2s">
+      <div class="feature-icon-box">📊</div>
+      <div>
+        <div class="feature-title">數據分析後台</div>
+        <div class="feature-desc">違規紀錄查詢、熱點分析、時段趨勢統計，輔助校方優化巡查策略與健康教育資源分配。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section>
+  <div class="section-tag">// ARCHITECTURE</div>
+  <h2 class="section-title">系統架構</h2>
+
+  <div class="arch-diagram fade-in">
+    <div class="arch-layer">
+      <span class="arch-layer-tag">INPUT 輸入層</span>
+      <div class="arch-item"><span class="arch-item-icon">📹</span> 監控攝影機 (RTSP)</div>
+      <div class="arch-item"><span class="arch-item-icon">🌫️</span> MQ-135 感測器</div>
+      <div class="arch-item"><span class="arch-item-icon">🎙️</span> 音訊偵測（選配）</div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 0.3rem;color:var(--accent)">→</div>
+    <div class="arch-layer">
+      <span class="arch-layer-tag">AI 辨識層</span>
+      <div class="arch-item"><span class="arch-item-icon">🤖</span> YOLOv8 物件偵測</div>
+      <div class="arch-item"><span class="arch-item-icon">🧍</span> MediaPipe 姿態</div>
+      <div class="arch-item"><span class="arch-item-icon">🔗</span> 多模態融合</div>
+    </div>
+    <div style="display:flex;align-items:center;padding:0 0.3rem;color:var(--accent)">→</div>
+    <div class="arch-layer">
+      <span class="arch-layer-tag">OUTPUT 輸出層</span>
+      <div class="arch-item"><span class="arch-item-icon">🔊</span> 即時廣播警示</div>
+      <div class="arch-item"><span class="arch-item-icon">🙈</span> 臉部打碼回傳</div>
+      <div class="arch-item"><span class="arch-item-icon">📋</span> 後端管理平台</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-copy">© 2025 SmokeSentry AI · 校園吸煙行為智慧辨識與預警系統</div>
+  <ul class="footer-links">
+    <li><a href="dashboard.html">管理後台</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#how">系統架構</a></li>
+  </ul>
+</footer>
+
+<script>
+// ── Counter animation ──
+const counters = [
+  { el: document.getElementById('cnt1'), target: 23, suffix: '' },
+  { el: document.getElementById('cnt2'), target: 94, suffix: '%' },
+  { el: document.getElementById('cnt3'), target: 12, suffix: '' },
+  { el: document.getElementById('cnt4'), target: 87, suffix: '' },
+];
+
+function animateCounters() {
+  counters.forEach(c => {
+    let start = 0;
+    const step = c.target / 60;
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= c.target) { start = c.target; clearInterval(timer); }
+      c.el.textContent = Math.round(start) + c.suffix;
+    }, 20);
+  });
+}
+setTimeout(animateCounters, 500);
+
+// ── Canvas Demo ──
+const canvas = document.getElementById('demoCanvas');
+const ctx = canvas.getContext('2d');
+let state = 'normal';
+let frame = 0;
+let particles = [];
+let detections = [];
+let currentCam = 'CAM-01';
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.width * 10 / 16;
+}
+resize();
+window.addEventListener('resize', resize);
+
+function addLog(msg, type='') {
+  const log = document.getElementById('eventLog');
+  if (!log) return;
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type ? 'log-'+type : ''}">${msg}</span>`;
+  log.insertBefore(entry, log.firstChild);
+  if (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+function updateStatus(scenario) {
+  const s = {
+    normal: {
+      person:'● 偵測到 1 人', personC:'dot-safe',
+      cig:'○ 未偵測', cigC:'',
+      pose:'○ 正常', poseC:'',
+      smoke:'● 正常', smokeC:'dot-safe',
+      fusion:'— 安全', fusionC:'dot-safe',
+      yolo:52, posev:18, sensorv:8, total:12,
+      aqi:'120 AQI', aqiW:'12%', aqiC:'sv-safe',
+      smokeD:'LOW', smokeW:'8%',
+    },
+    eating: {
+      person:'● 偵測到 1 人', personC:'dot-safe',
+      cig:'⚠ 疑似物件', cigC:'dot-warn',
+      pose:'⚠ 手靠近嘴', poseC:'dot-warn',
+      smoke:'● 正常', smokeC:'dot-safe',
+      fusion:'✓ 安全（無煙）', fusionC:'dot-safe',
+      yolo:61, posev:74, sensorv:9, total:28,
+      aqi:'135 AQI', aqiW:'14%', aqiC:'sv-safe',
+      smokeD:'LOW', smokeW:'9%',
+    },
+    lighting: {
+      person:'● 偵測到 1 人', personC:'dot-safe',
+      cig:'● 偵測香菸', cigC:'dot-danger',
+      pose:'● 點火動作', poseC:'dot-danger',
+      smoke:'⚠ 上升中', smokeC:'dot-warn',
+      fusion:'⚠ 點煙中！', fusionC:'dot-warn',
+      yolo:88, posev:85, sensorv:55, total:76,
+      aqi:'580 AQI', aqiW:'58%', aqiC:'sv-warn',
+      smokeD:'RISING', smokeW:'55%',
+    },
+    smoking: {
+      person:'● 偵測到 1 人', personC:'dot-safe',
+      cig:'● 偵測香菸', cigC:'dot-danger',
+      pose:'● 吸菸姿態', poseC:'dot-danger',
+      smoke:'● 高濃度', smokeC:'dot-danger',
+      fusion:'🚨 吸菸！警示！', fusionC:'dot-danger',
+      yolo:96, posev:91, sensorv:88, total:94,
+      aqi:'847 AQI', aqiW:'85%', aqiC:'sv-danger',
+      smokeD:'HIGH', smokeW:'88%',
+    },
+  };
+  const d = s[scenario] || s.normal;
+
+  const set = (id, html, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = html;
+    el.className = 'status-val ' + (cls||'');
+  };
+  set('st-person', d.person, d.personC);
+  set('st-cig', d.cig, d.cigC);
+  set('st-pose', d.pose, d.poseC);
+  set('st-smoke', d.smoke, d.smokeC);
+  set('st-fusion', d.fusion, d.fusionC + ' ' + (scenario==='smoking'?'dot-danger':''));
+
+  const setBar = (vid, bid, v) => {
+    const ve = document.getElementById(vid); const be = document.getElementById(bid);
+    if (ve) ve.textContent = v+'%';
+    if (be) be.style.width = v+'%';
+  };
+  setBar('cv-yolo','cb-yolo',d.yolo);
+  setBar('cv-pose','cb-pose',d.posev);
+  setBar('cv-sensor','cb-sensor',d.sensorv);
+  setBar('cv-total','cb-total',d.total);
+  document.getElementById('cv-total').textContent = d.total+'%';
+
+  const aqiEl = document.getElementById('aqiVal');
+  if (aqiEl) { aqiEl.textContent = d.aqi; aqiEl.className = 'sensor-value ' + d.aqiC; }
+  const aqiBar = document.getElementById('aqiBar');
+  if (aqiBar) aqiBar.style.width = d.aqiW;
+  const smokeEl = document.getElementById('smokeVal');
+  if (smokeEl) { smokeEl.textContent = d.smokeD; smokeEl.className = 'sensor-value ' + (scenario==='smoking'?'sv-danger':scenario==='lighting'?'sv-warn':'sv-safe'); }
+  const smokeBar = document.getElementById('smokeBar');
+  if (smokeBar) smokeBar.style.width = d.smokeW;
+}
+
+function triggerScenario(s) {
+  state = s;
+  particles = [];
+  detections = [];
+  frame = 0;
+
+  const msgs = {
+    normal: ['😐 正常行走模式', 'normal'],
+    eating: ['🍔 吃東西測試 — 多模態融合排除誤判', 'warn'],
+    lighting: ['🔥 偵測到點煙動作，煙霧感測上升中...', 'warn'],
+    smoking: ['🚨 吸菸行為確認！發送警示廣播！', 'danger'],
+  };
+  addLog(msgs[s][0], msgs[s][1]);
+  updateStatus(s);
+
+  if (s === 'smoking' || s === 'lighting') {
+    const popup = document.getElementById('alertPopup');
+    if (popup) {
+      popup.textContent = s === 'smoking' ? '⚠ 吸菸行為已偵測！廣播警示中...' : '⚠ 點煙行為偵測，持續監控中...';
+      popup.classList.add('show');
+      setTimeout(() => popup.classList.remove('show'), 4000);
+    }
+  }
+}
+
+function switchCam(btn, loc) {
+  document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const el = document.getElementById('camLocation');
+  if (el) el.textContent = loc;
+  currentCam = btn.textContent;
+  addLog(`切換至 ${btn.textContent} — ${loc}`, '');
+  triggerScenario('normal');
+}
+
+// Drawing loop
+function drawScene() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // BG
+  ctx.fillStyle = '#050a0f';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,180,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let x=0;x<W;x+=30) { ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for (let y=0;y<H;y+=30) { ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  // Perspective lines (floor/wall)
+  ctx.strokeStyle = 'rgba(0,180,255,0.08)';
+  ctx.lineWidth = 1;
+  const vx = W*0.5, vy = H*0.38;
+  [[0,H*0.5,W,H*0.5],[0,H,W,H],[0,H*0.5,W*0.3,H],[W,H*0.5,W*0.7,H]].forEach(([x1,y1,x2,y2])=>{
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  });
+
+  const px = W*0.45, py = H*0.28;
+  const bodyH = H*0.42, bodyW = W*0.08;
+
+  // Person body
+  if (state !== 'normal' || frame % 2 === 0) {
+    // Head
+    const headR = bodyW*0.55;
+    ctx.fillStyle = 'rgba(255,210,170,0.75)';
+    ctx.beginPath();ctx.arc(px+bodyW/2, py+headR, headR, 0, Math.PI*2);ctx.fill();
+    // Torso
+    ctx.fillStyle = 'rgba(60,80,130,0.75)';
+    ctx.fillRect(px, py+headR*2+2, bodyW, bodyH*0.55);
+    // Legs
+    ctx.fillStyle = 'rgba(40,50,80,0.75)';
+    ctx.fillRect(px, py+headR*2+bodyH*0.55+2, bodyW*0.45, bodyH*0.38);
+    ctx.fillRect(px+bodyW*0.55, py+headR*2+bodyH*0.55+2, bodyW*0.45, bodyH*0.38);
+  }
+
+  // Arm animation
+  const armAngle = state==='smoking'||state==='lighting'
+    ? -0.9 + Math.sin(frame*0.05)*0.15
+    : -0.2 + Math.sin(frame*0.03)*0.1;
+  const armLen = W*0.07;
+  const armStartX = px+bodyW;
+  const armStartY = py+bodyH*0.15+(bodyW*0.55)*2+2;
+  const armEndX = armStartX + Math.cos(armAngle)*armLen;
+  const armEndY = armStartY + Math.sin(armAngle)*armLen;
+  ctx.strokeStyle = 'rgba(60,80,130,0.8)';
+  ctx.lineWidth = bodyW*0.35;
+  ctx.lineCap = 'round';
+  ctx.beginPath();ctx.moveTo(armStartX,armStartY);ctx.lineTo(armEndX,armEndY);ctx.stroke();
+
+  // Cigarette
+  if (state==='smoking'||state==='lighting') {
+    ctx.strokeStyle = '#f5f0e8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();ctx.moveTo(armEndX,armEndY);ctx.lineTo(armEndX+W*0.03,armEndY-H*0.02);ctx.stroke();
+    // Ember
+    const emberAlpha = 0.5+Math.sin(frame*0.15)*0.4;
+    ctx.fillStyle = `rgba(255,${state==='lighting'?180:80},20,${emberAlpha})`;
+    ctx.beginPath();ctx.arc(armEndX+W*0.03,armEndY-H*0.02,3,0,Math.PI*2);ctx.fill();
+
+    // Smoke particles
+    if (frame%4===0) {
+      particles.push({ x:armEndX+W*0.03, y:armEndY-H*0.02, vx:(Math.random()-0.5)*0.5, vy:-0.8-Math.random()*0.5, life:1, size:3+Math.random()*5 });
+    }
+  }
+
+  // Draw smoke
+  particles = particles.filter(p=>p.life>0);
+  particles.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.life-=0.015; p.size*=1.02;
+    ctx.globalAlpha = p.life*0.25;
+    ctx.fillStyle = `rgba(180,200,220,0.5)`;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  // Detection boxes
+  if (state==='smoking'||state==='lighting') {
+    // Person box
+    const bx = px-4, by = py-4, bw = bodyW+8, bh = bodyH+12;
+    const dColor = state==='smoking'?'rgba(255,58,92,':'rgba(255,184,0,';
+    const alpha = 0.7+Math.sin(frame*0.08)*0.3;
+    ctx.strokeStyle = dColor+alpha+')';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx,by,bw,bh);
+    // Label
+    ctx.fillStyle = dColor+'0.9)';
+    ctx.fillRect(bx,by-18,state==='smoking'?120:110,18);
+    ctx.fillStyle = state==='smoking'?'white':'black';
+    ctx.font = `bold ${W*0.018}px JetBrains Mono, monospace`;
+    ctx.fillText(state==='smoking'?'SMOKING 94%':'LIGHTING 88%', bx+4, by-5);
+    // Corners
+    const cs = 10;
+    ctx.strokeStyle = dColor+alpha+')';
+    ctx.lineWidth = 2.5;
+    [[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx*cs,y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+dy*cs);ctx.stroke();
+    });
+
+    // Cigarette box
+    if (state==='smoking') {
+      ctx.strokeStyle = 'rgba(255,184,0,0.8)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(armEndX-4, armEndY-H*0.05, W*0.05, H*0.06);
+      ctx.fillStyle = 'rgba(255,184,0,0.9)';
+      ctx.fillRect(armEndX-4, armEndY-H*0.05-16, 80, 16);
+      ctx.fillStyle = 'black';
+      ctx.font = `bold ${W*0.016}px JetBrains Mono, monospace`;
+      ctx.fillText('CIGARETTE 89%', armEndX-2, armEndY-H*0.05-4);
+    }
+  } else if (state==='eating') {
+    // Show person box in yellow (warning)
+    const bx = px-4, by = py-4, bw = bodyW+8, bh = bodyH+12;
+    ctx.strokeStyle = 'rgba(255,184,0,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx,by,bw,bh);
+    ctx.fillStyle = 'rgba(255,184,0,0.85)';
+    ctx.fillRect(bx,by-18,110,18);
+    ctx.fillStyle = 'black';
+    ctx.font = `bold ${W*0.018}px JetBrains Mono, monospace`;
+    ctx.fillText('GESTURE? 61%', bx+4, by-5);
+    // Cleared by fusion
+    ctx.fillStyle = 'rgba(0,255,163,0.15)';
+    ctx.fillRect(bx-10,by-10,bw+20,bh+20);
+    ctx.strokeStyle = 'rgba(0,255,163,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx-10,by-10,bw+20,bh+20);
+    ctx.fillStyle = 'rgba(0,255,163,0.9)';
+    ctx.fillRect(bx+20,by+bh+12,120,16);
+    ctx.fillStyle = 'black';
+    ctx.font = `bold ${W*0.016}px JetBrains Mono, monospace`;
+    ctx.fillText('FUSION: CLEARED', bx+22, by+bh+24);
+  } else {
+    // Normal — green person box
+    ctx.strokeStyle = 'rgba(0,255,163,0.3)';
+    ctx.lineWidth = 1;
+    const bx = px-4, by = py-4, bw = bodyW+8, bh = bodyH+12;
+    ctx.strokeRect(bx,by,bw,bh);
+  }
+
+  // Scan line
+  const scanY = (frame % H);
+  const sg = ctx.createLinearGradient(0,scanY-10,0,scanY+10);
+  sg.addColorStop(0,'transparent');sg.addColorStop(0.5,'rgba(0,180,255,0.3)');sg.addColorStop(1,'transparent');
+  ctx.fillStyle = sg;
+  ctx.fillRect(0,scanY-10,W,20);
+
+  // HUD
+  ctx.fillStyle = 'rgba(0,180,255,0.7)';
+  ctx.font = `${W*0.018}px JetBrains Mono, monospace`;
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  ctx.fillText(`FPS: 30 | ${currentCam} | ${ts}`, 10, 18);
+  ctx.fillText(`YOLOv8n | 640×400`, 10, 36);
+
+  if (state==='smoking') {
+    const alertAlpha = 0.5+Math.sin(frame*0.15)*0.5;
+    ctx.fillStyle = `rgba(255,58,92,${alertAlpha})`;
+    ctx.font = `bold ${W*0.022}px JetBrains Mono, monospace`;
+    const txt = '⚠ SMOKING DETECTED — ALERTING';
+    const tw = ctx.measureText(txt).width;
+    ctx.fillText(txt, W-tw-10, H-10);
+  }
+
+  frame++;
+  requestAnimationFrame(drawScene);
+}
+drawScene();
+updateStatus('normal');
+
+// ── Scroll fade in ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.15 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
