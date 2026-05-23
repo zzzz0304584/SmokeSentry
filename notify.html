@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 通知設定</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.settings-section { margin-bottom:1.5rem; }
+.settings-title { font-family:var(--font-display); font-size:1rem; font-weight:700; margin-bottom:1rem; display:flex; align-items:center; gap:.6rem; }
+.setting-row { display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.2rem; border-bottom:1px solid rgba(255,255,255,.04); }
+.setting-row:last-child { border-bottom:none; }
+.setting-info {}
+.setting-name { font-size:.88rem; margin-bottom:.15rem; }
+.setting-desc { font-size:.75rem; color:var(--text-muted); }
+.toggle { position:relative;display:inline-block;width:42px;height:22px; }
+.toggle input { opacity:0;width:0;height:0; }
+.toggle-slider { position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,.08);border:1px solid var(--border);transition:.3s;border-radius:22px; }
+.toggle-slider::before { content:'';position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:var(--text-muted);transition:.3s;border-radius:50%; }
+input:checked+.toggle-slider { background:rgba(0,180,255,.2);border-color:var(--accent); }
+input:checked+.toggle-slider::before { transform:translateX(20px);background:var(--accent); }
+.conn-status { display:flex; align-items:center; gap:.5rem; font-family:var(--font-mono); font-size:.75rem; }
+.conn-dot { width:8px;height:8px;border-radius:50%;animation:pulse 2s infinite; }
+.conn-ok { background:var(--safe); }
+.conn-fail { background:var(--danger); }
+.conn-row { display:flex; align-items:center; gap:.8rem; }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <div class="grid-2" style="align-items:start">
+      <!-- EMAIL settings -->
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📧 Email SMTP 設定</div>
+            <div class="conn-status"><div class="conn-dot conn-ok"></div><span style="color:var(--safe)">已連線</span></div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.8rem">
+            <div class="form-group"><div class="form-label">SMTP 伺服器</div><input type="text" class="input-field" value="smtp.gmail.com"></div>
+            <div class="grid-2" style="margin:0">
+              <div class="form-group"><div class="form-label">Port</div><input type="text" class="input-field" value="587"></div>
+              <div class="form-group"><div class="form-label">加密</div><select class="input-field"><option>TLS</option><option>SSL</option><option>無</option></select></div>
+            </div>
+            <div class="form-group"><div class="form-label">寄件人 Email</div><input type="email" class="input-field" value="smokesentry@school.edu.tw"></div>
+            <div class="form-group"><div class="form-label">寄件人名稱</div><input type="text" class="input-field" value="SmokeSentry AI 系統"></div>
+            <div class="form-group"><div class="form-label">密碼 / App Password</div><input type="password" class="input-field" value="••••••••••••"></div>
+            <div style="display:flex;gap:.5rem">
+              <button class="btn btn-ghost" onclick="testEmail()" style="flex:1;justify-content:center">🧪 測試連線</button>
+              <button class="btn btn-accent" onclick="saveEmail()" style="flex:1;justify-content:center">儲存</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">📧 Email 通知規則</div></div>
+          <div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">即時警示通知</div><div class="setting-desc">偵測到吸菸時立即發送 Email</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">點煙行為通知</div><div class="setting-desc">偵測到點煙動作時發送</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">疑似違規通知</div><div class="setting-desc">低信心度事件也發送通知</div></div><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">每日摘要報告</div><div class="setting-desc">每天 18:00 發送當日統計</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">每週報告</div><div class="setting-desc">每週一 08:00 發送週報</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">附加截圖</div><div class="setting-desc">Email 中附上事件截圖（打碼後）</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LINE Bot settings -->
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="card">
+          <div class="card-header"><div class="card-title">💬 LINE Bot 設定</div>
+            <div class="conn-status"><div class="conn-dot conn-ok"></div><span style="color:var(--safe)">已連線</span></div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.8rem">
+            <div class="form-group"><div class="form-label">Channel Access Token</div>
+              <div class="conn-row">
+                <input type="password" class="input-field" value="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="flex:1">
+                <button class="btn btn-ghost" style="flex-shrink:0;padding:.55rem .8rem" onclick="this.previousElementSibling.type=this.previousElementSibling.type==='password'?'text':'password'">👁</button>
+              </div>
+            </div>
+            <div class="form-group"><div class="form-label">Channel Secret</div><input type="password" class="input-field" value="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
+            <div class="form-group"><div class="form-label">預設群組 Chat ID</div><input type="text" class="input-field" value="Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" placeholder="群組 ID（C 開頭）"></div>
+            <div style="background:rgba(0,180,255,.05);border:1px solid var(--border);padding:.9rem;font-size:.8rem;color:var(--text-muted);line-height:1.7">
+              📖 如何取得 Chat ID：<br>
+              1. 將 Bot 加入目標群組<br>
+              2. 在群組中傳送任意訊息<br>
+              3. 呼叫 Webhook 即可看到 Chat ID
+            </div>
+            <div style="display:flex;gap:.5rem">
+              <button class="btn btn-ghost" onclick="testLine()" style="flex:1;justify-content:center">🧪 發送測試訊息</button>
+              <button class="btn btn-accent" onclick="saveLine()" style="flex:1;justify-content:center">儲存</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">💬 LINE 通知規則</div></div>
+          <div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">即時警示</div><div class="setting-desc">確認吸菸立即推播 LINE</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">點煙偵測</div><div class="setting-desc">點煙行為通知</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">疑似違規</div><div class="setting-desc">低信心度事件推播</div></div><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">夜間免打擾</div><div class="setting-desc">22:00–07:00 暫停 LINE 推播</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="setting-name">每日 LINE 摘要</div><div class="setting-desc">每天 18:00 推播當日統計</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔁 同步發送規則</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.6rem">
+            <div style="font-size:.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:.4rem">當偵測到以下事件時，同時透過 Email 與 LINE Bot 通報：</div>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 🔴 吸菸確認（信心度 ≥ 90%）</label>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 🟡 點煙行為（信心度 ≥ 80%）</label>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" style="accent-color:var(--accent)"> 🔵 疑似違規（信心度 ≥ 60%）</label>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 📊 每日報告（Email + LINE）</label>
+            <div class="divider"></div>
+            <div style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-muted)">同步延遲: <span style="color:var(--accent)">< 2 秒</span> | 重試次數: <span style="color:var(--accent)">3 次</span></div>
+            <button class="btn btn-accent" onclick="saveSyncRules()" style="justify-content:center">儲存同步設定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script src="shared.js"></script>
+<script>
+injectShell('通知設定');
+function testEmail() { showToast('測試 Email 已發送至 smokesentry@school.edu.tw', 'success'); }
+function saveEmail() { showToast('Email 設定已儲存', 'success'); }
+function testLine() { showToast('LINE Bot 測試訊息已推播至群組', 'success'); }
+function saveLine() { showToast('LINE Bot 設定已儲存', 'success'); }
+function saveSyncRules() { showToast('同步規則已儲存', 'success'); }
+</script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 統計報表</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.chart-wrap { padding: 1.2rem; }
+.period-bar { display:flex; gap:.5rem; margin-bottom:1rem; }
+.period-btn { padding:.3rem .9rem; font-family:var(--font-mono); font-size:.7rem; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; transition:all .2s; }
+.period-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(0,180,255,.08); }
+.period-btn:hover { border-color:var(--accent); color:var(--accent); }
+.legend { display:flex; gap:1.2rem; flex-wrap:wrap; margin-top:.8rem; }
+.legend-item { display:flex; align-items:center; gap:.4rem; font-family:var(--font-mono); font-size:.68rem; color:var(--text-muted); }
+.legend-dot { width:10px; height:10px; border-radius:50%; }
+.kpi-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1rem; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); padding:1.2rem; }
+.kpi-val { font-family:var(--font-display); font-size:2.2rem; font-weight:800; line-height:1; }
+.kpi-label { font-family:var(--font-mono); font-size:.65rem; color:var(--text-muted); margin-top:.4rem; }
+.kpi-sub { font-size:.78rem; color:var(--text-muted); margin-top:.3rem; }
+.bar-chart-row { display:flex; align-items:center; gap:.8rem; margin-bottom:.5rem; }
+.bar-label { font-family:var(--font-mono); font-size:.68rem; color:var(--text-muted); width:80px; flex-shrink:0; text-align:right; }
+.bar-track { flex:1; height:18px; background:rgba(255,255,255,.04); border-radius:2px; overflow:hidden; position:relative; }
+.bar-fill { height:100%; border-radius:2px; transition:width 1s ease; display:flex; align-items:center; justify-content:flex-end; padding-right:6px; }
+.bar-val { font-family:var(--font-mono); font-size:.62rem; color:rgba(255,255,255,.7); }
+.donut-wrap { display:flex; align-items:center; gap:1.5rem; }
+.donut-legend { display:flex; flex-direction:column; gap:.6rem; }
+.donut-legend-item { display:flex; align-items:center; gap:.6rem; font-size:.82rem; }
+.donut-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.export-bar { display:flex; gap:.5rem; margin-bottom:1.2rem; }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <!-- Period selector + export -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+      <div class="period-bar">
+        <button class="period-btn" onclick="setPeriod(this,'7d')">7 天</button>
+        <button class="period-btn active" onclick="setPeriod(this,'30d')">30 天</button>
+        <button class="period-btn" onclick="setPeriod(this,'3m')">3 個月</button>
+        <button class="period-btn" onclick="setPeriod(this,'1y')">全年</button>
+      </div>
+      <div class="export-bar">
+        <button class="btn btn-ghost" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn btn-ghost" onclick="exportPDF()">📄 PDF 報表</button>
+        <button class="btn btn-accent" onclick="sendReport()">📧 寄送報表</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-val" style="color:var(--danger)" id="kpiTotal">87</div>
+        <div class="kpi-label">本月違規總數</div>
+        <div class="kpi-sub" style="color:var(--safe)">▼ 較上月減少 12%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" style="color:var(--safe)">94.2%</div>
+        <div class="kpi-label">辨識準確率</div>
+        <div class="kpi-sub" style="color:var(--safe)">▲ 較上月提升 2.1%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" style="color:var(--warn)">5.8%</div>
+        <div class="kpi-label">誤判率</div>
+        <div class="kpi-sub" style="color:var(--safe)">▼ 多模態融合降低誤判</div>
+      </div>
+    </div>
+
+    <!-- Charts row 1 -->
+    <div class="grid-2" style="margin-bottom:1rem">
+      <div class="card">
+        <div class="card-header"><div class="card-title">📈 每日違規趨勢（30天）</div></div>
+        <div class="chart-wrap"><canvas id="dailyChart" height="180"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🕐 違規時段分布</div></div>
+        <div class="chart-wrap"><canvas id="hourlyChart" height="180"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Charts row 2 -->
+    <div class="grid-2" style="margin-bottom:1rem">
+      <!-- Location breakdown -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">📍 違規地點排名</div></div>
+        <div class="card-body">
+          <div id="locationBars"></div>
+        </div>
+      </div>
+      <!-- Type donut -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">🔍 違規類型分布</div></div>
+        <div class="card-body">
+          <div class="donut-wrap">
+            <canvas id="donutChart" width="150" height="150" style="flex-shrink:0"></canvas>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Weekly comparison -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><div class="card-title">📊 各攝影機本月統計</div></div>
+      <div class="chart-wrap"><canvas id="camChart" height="130"></canvas></div>
+    </div>
+
+  </div>
+</div>
+<script src="shared.js"></script>
+<script>
+injectShell('統計報表');
+
+function setPeriod(btn, period) {
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Re-draw with slightly different data
+  const mul = {d7:0.4, '30d':1, '3m':3, '1y':12}[period] || 1;
+  document.getElementById('kpiTotal').textContent = Math.round(87 * mul);
+  drawDailyChart();
+}
+
+// ── Helpers ──
+function rand(min, max) { return Math.round(min + Math.random() * (max - min)); }
+
+// ── Daily trend ──
+function drawDailyChart() {
+  const cv = document.getElementById('dailyChart');
+  const ctx = cv.getContext('2d');
+  const W = cv.parentElement.clientWidth - 40, H = 180;
+  cv.width = W; cv.height = H;
+  const data = Array.from({length:30}, (_,i) => rand(0,12));
+  const max = Math.max(...data);
+  const pad = {t:15,b:28,l:30,r:10};
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,180,255,.06)'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const y=pad.t+ch*(1-i/4);
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+    ctx.fillStyle='rgba(0,180,255,.45)';ctx.font='9px JetBrains Mono,monospace';
+    ctx.fillText(Math.round(max*i/4),2,y+4);
+  }
+
+  // Area
+  const gr=ctx.createLinearGradient(0,pad.t,0,H-pad.b);
+  gr.addColorStop(0,'rgba(255,58,92,.2)');gr.addColorStop(1,'rgba(255,58,92,0)');
+  ctx.beginPath();
+  data.forEach((v,i)=>{const x=pad.l+(i/(data.length-1))*cw,y=pad.t+ch*(1-v/max);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.lineTo(pad.l+cw,H-pad.b);ctx.lineTo(pad.l,H-pad.b);ctx.closePath();ctx.fillStyle=gr;ctx.fill();
+
+  // Line
+  ctx.beginPath();ctx.strokeStyle='#ff3a5c';ctx.lineWidth=2;ctx.lineJoin='round';
+  data.forEach((v,i)=>{const x=pad.l+(i/(data.length-1))*cw,y=pad.t+ch*(1-v/max);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.stroke();
+
+  // X labels
+  ctx.fillStyle='rgba(107,138,170,.7)';ctx.font='9px JetBrains Mono,monospace';
+  [0,7,14,21,29].forEach(i=>{const x=pad.l+(i/(data.length-1))*cw;ctx.fillText(`${i+1}日`,x-8,H-8);});
+}
+
+// ── Hourly bar ──
+function drawHourlyChart() {
+  const cv = document.getElementById('hourlyChart');
+  const ctx = cv.getContext('2d');
+  const W = cv.parentElement.clientWidth - 40, H = 180;
+  cv.width = W; cv.height = H;
+  const data = [0,0,0,0,0,0,1,3,8,6,4,5,9,7,6,5,8,10,6,4,3,2,1,0];
+  const max = Math.max(...data);
+  const pad = {t:15,b:30,l:28,r:8};
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+  const bw = cw/24*0.65;
+
+  data.forEach((v,i)=>{
+    const x = pad.l + (i/24)*cw + (cw/24-bw)/2;
+    const h = (v/max)*ch;
+    const y = pad.t + ch - h;
+    const intensity = v/max;
+    const r=Math.round(0+intensity*255),g=Math.round(180-intensity*122),b=Math.round(255-intensity*223);
+    ctx.fillStyle=`rgba(${r},${g},${b},0.75)`;
+    ctx.fillRect(x,y,bw,h);
+  });
+
+  // X labels
+  ctx.fillStyle='rgba(107,138,170,.7)';ctx.font='9px JetBrains Mono,monospace';
+  [6,9,12,15,18,21].forEach(i=>{const x=pad.l+(i/24)*cw;ctx.fillText(`${i}時`,x-8,H-10);});
+}
+
+// ── Location bars ──
+const locations = [
+  { name:'廁所外走廊 B棟', count:32, pct:37 },
+  { name:'樓梯間 A棟', count:21, pct:24 },
+  { name:'校門口周邊', count:18, pct:21 },
+  { name:'宿舍公共空間', count:12, pct:14 },
+  { name:'其他區域', count:4, pct:4 },
+];
+const colors = ['var(--danger)','var(--warn)','var(--accent)','var(--safe)','rgba(107,138,170,.8)'];
+document.getElementById('locationBars').innerHTML = locations.map((l,i)=>`
+  <div class="bar-chart-row">
+    <div class="bar-label">${l.name.length>6?l.name.slice(0,8)+'…':l.name}</div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${l.pct}%;background:${colors[i]}"><span class="bar-val">${l.count}</span></div>
+    </div>
+    <div style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-muted);width:32px;text-align:right">${l.pct}%</div>
+  </div>`).join('');
+
+// ── Donut ──
+function drawDonut() {
+  const cv = document.getElementById('donutChart');
+  const ctx = cv.getContext('2d');
+  const W=150,H=150;cv.width=W;cv.height=H;
+  const segments=[
+    {label:'吸菸（確認）',val:52,color:'#ff3a5c'},
+    {label:'點煙行為',val:24,color:'#ffb800'},
+    {label:'疑似違規',val:15,color:'#00b4ff'},
+    {label:'誤判（排除）',val:9,color:'rgba(107,138,170,.5)'},
+  ];
+  const total=segments.reduce((s,x)=>s+x.val,0);
+  let start=-Math.PI/2;
+  const cx=W/2,cy=H/2,r=58,ir=35;
+
+  segments.forEach(seg=>{
+    const angle=(seg.val/total)*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+angle);ctx.closePath();
+    ctx.fillStyle=seg.color;ctx.fill();
+    start+=angle;
+  });
+
+  // Inner circle
+  ctx.beginPath();ctx.arc(cx,cy,ir,0,Math.PI*2);ctx.fillStyle='var(--surface)';ctx.fill();
+  ctx.fillStyle='var(--text)';ctx.font='bold 14px Syne,sans-serif';ctx.textAlign='center';ctx.fillText('87',cx,cy+2);
+  ctx.fillStyle='var(--text-muted)';ctx.font='8px JetBrains Mono,monospace';ctx.fillText('件',cx,cy+14);
+
+  document.getElementById('donutLegend').innerHTML = segments.map(s=>`
+    <div class="donut-legend-item">
+      <div class="donut-legend-dot" style="background:${s.color}"></div>
+      <span>${s.label}</span>
+      <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);margin-left:auto">${s.val}</span>
+    </div>`).join('');
+}
+
+// ── Camera comparison ──
+function drawCamChart() {
+  const cv = document.getElementById('camChart');
+  const ctx = cv.getContext('2d');
+  const W = cv.parentElement.clientWidth - 40, H = 130;
+  cv.width = W; cv.height = H;
+  const cams = ['CAM-01\n廁所外走廊','CAM-02\n樓梯間','CAM-03\n宿舍','CAM-04\n校門口'];
+  const vals = [32,21,12,22];
+  const max = Math.max(...vals);
+  const colors2 = ['#ff3a5c','#ffb800','#00ffa3','#00b4ff'];
+  const pad = {t:10,b:40,l:10,r:10};
+  const cw = W-pad.l-pad.r;
+  const bw = cw/cams.length*0.5;
+
+  cams.forEach((c,i)=>{
+    const x = pad.l + (i+0.5)*(cw/cams.length) - bw/2;
+    const h = (vals[i]/max)*(H-pad.t-pad.b);
+    const y = H-pad.b-h;
+    ctx.fillStyle=colors2[i]+'bb';ctx.fillRect(x,y,bw,h);
+    ctx.fillStyle=colors2[i];ctx.font='bold 12px Syne,sans-serif';ctx.textAlign='center';
+    ctx.fillText(vals[i],x+bw/2,y-6);
+    ctx.fillStyle='rgba(107,138,170,.7)';ctx.font='9px JetBrains Mono,monospace';
+    c.split('\n').forEach((line,li)=>ctx.fillText(line,x+bw/2,H-pad.b+14+li*12));
+  });
+}
+
+// ── Export / send ──
+function exportCSV() {
+  const rows = [['日期','地點','類型','信心度','狀態'],
+    ...Array.from({length:10},(_,i)=>[`2025-05-${String(14+i).padStart(2,'0')}`,locations[i%5].name,['吸菸','點煙','疑似'][i%3],rand(75,97)+'%','已通報'])];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download='SmokeSentry_統計報表.csv';a.click();
+  showToast('CSV 已匯出', 'success');
+}
+function exportPDF() { showToast('PDF 報表產生中，請稍候…', 'info'); setTimeout(()=>showToast('PDF 已準備完成（示範）', 'success'),1500); }
+function sendReport() {
+  showToast('報表已發送至所有管理者信箱', 'success', 4000);
+}
+
+// Init
+setTimeout(()=>{ drawDailyChart(); drawHourlyChart(); drawDonut(); drawCamChart(); }, 100);
+window.addEventListener('resize', ()=>{ drawDailyChart(); drawHourlyChart(); drawCamChart(); });
+</script>
+</body>
+</html>

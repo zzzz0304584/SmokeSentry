@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 熱點分析</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.hm-grid { display:grid; grid-template-columns:60px repeat(8,1fr); gap:3px; font-family:var(--font-mono); font-size:.62rem; }
+.hm-cell { aspect-ratio:1.1; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:.6rem; color:rgba(255,255,255,.6); cursor:default; transition:transform .15s; }
+.hm-cell:hover { transform:scale(1.15); z-index:5; position:relative; }
+.hm-label { color:var(--text-muted); display:flex; align-items:center; justify-content:flex-end; padding-right:6px; aspect-ratio:unset; font-size:.68rem; }
+.hm-header { color:var(--text-muted); display:flex; align-items:center; justify-content:center; aspect-ratio:unset; height:22px; font-size:.62rem; }
+.floor-plan-wrap { position:relative; padding:1.5rem; }
+.campus-map { width:100%; max-width:460px; margin:0 auto; position:relative; }
+.building { border:1px solid rgba(0,180,255,.2); background:rgba(0,180,255,.03); margin-bottom:.8rem; padding:.8rem; position:relative; }
+.building-label { font-family:var(--font-mono); font-size:.65rem; color:var(--text-muted); margin-bottom:.6rem; letter-spacing:.08em; }
+.room-row { display:flex; gap:.5rem; }
+.room {
+  flex:1; padding:.5rem .3rem; text-align:center; font-size:.68rem; cursor:pointer;
+  border:1px solid rgba(0,180,255,.1); position:relative; transition:all .2s;
+}
+.room:hover { border-color:var(--accent); }
+.room-name { font-size:.62rem; color:var(--text-muted); }
+.room-count { font-family:var(--font-display); font-size:1.1rem; font-weight:800; }
+.room-indicator { position:absolute; top:-4px; right:-4px; width:10px; height:10px; border-radius:50%; animation:pulse 2s infinite; }
+.ri-h { background:var(--danger); }
+.ri-m { background:var(--warn); }
+.ri-l { background:var(--safe); }
+.insight-card { background:var(--surface2); border:1px solid var(--border); padding:1rem; margin-bottom:.6rem; display:flex; gap:.8rem; align-items:flex-start; }
+.insight-icon { font-size:1.2rem; flex-shrink:0; }
+.insight-title { font-family:var(--font-display); font-size:.88rem; font-weight:700; margin-bottom:.2rem; }
+.insight-desc { font-size:.8rem; color:var(--text-muted); line-height:1.6; }
+.tooltip-box { position:fixed; background:var(--surface); border:1px solid var(--accent); padding:.6rem .9rem; font-family:var(--font-mono); font-size:.72rem; pointer-events:none; z-index:100; display:none; }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <div class="grid-2-1" style="align-items:start">
+      <div style="display:flex;flex-direction:column;gap:1rem">
+
+        <!-- Heatmap calendar -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📅 週×時段 違規熱力圖</div>
+            <div style="display:flex;gap:.5rem">
+              <select style="font-family:var(--font-mono);font-size:.65rem;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:.2rem .5rem;cursor:pointer" onchange="updateHeatmap(this.value)">
+                <option value="all">全部地點</option>
+                <option value="0">廁所外走廊 B棟</option>
+                <option value="1">樓梯間 A棟</option>
+                <option value="2">宿舍公共空間</option>
+                <option value="3">校門口周邊</option>
+              </select>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="hm-grid" id="weekHeatmap"></div>
+            <div style="display:flex;align-items:center;gap:.6rem;margin-top:.8rem;font-family:var(--font-mono);font-size:.62rem;color:var(--text-muted)">
+              <span>0件</span>
+              <div style="flex:1;height:8px;background:linear-gradient(90deg,rgba(0,50,100,.2),rgba(255,58,92,.85));border-radius:4px"></div>
+              <span>10+ 件</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Monthly heatmap -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">📆 本月每日違規熱圖</div></div>
+          <div class="card-body">
+            <div id="monthHeatmap" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px"></div>
+            <div style="display:flex;gap:.8rem;margin-top:.8rem;font-family:var(--font-mono);font-size:.62rem;color:var(--text-muted)">
+              <span style="color:var(--safe)">● 0-2件</span>
+              <span style="color:var(--warn)">● 3-6件</span>
+              <span style="color:var(--danger)">● 7+件</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <!-- Campus map -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">🗺️ 校園熱點地圖</div></div>
+          <div class="floor-plan-wrap">
+            <div class="campus-map">
+              <div class="building">
+                <div class="building-label">B棟 教學大樓</div>
+                <div class="room-row">
+                  <div class="room" style="background:rgba(255,58,92,.12);border-color:rgba(255,58,92,.4)">
+                    <div class="room-indicator ri-h"></div>
+                    <div class="room-count" style="color:var(--danger)">32</div>
+                    <div class="room-name">廁所外走廊</div>
+                  </div>
+                  <div class="room" style="background:rgba(255,184,0,.06);border-color:rgba(255,184,0,.3)">
+                    <div class="room-indicator ri-m"></div>
+                    <div class="room-count" style="color:var(--warn)">8</div>
+                    <div class="room-name">B1 樓梯間</div>
+                  </div>
+                  <div class="room">
+                    <div class="room-count" style="color:var(--text-muted)">2</div>
+                    <div class="room-name">走廊</div>
+                  </div>
+                </div>
+              </div>
+              <div class="building">
+                <div class="building-label">A棟 行政大樓</div>
+                <div class="room-row">
+                  <div class="room" style="background:rgba(255,184,0,.08);border-color:rgba(255,184,0,.3)">
+                    <div class="room-indicator ri-m"></div>
+                    <div class="room-count" style="color:var(--warn)">21</div>
+                    <div class="room-name">樓梯間</div>
+                  </div>
+                  <div class="room">
+                    <div class="room-count" style="color:var(--text-muted)">3</div>
+                    <div class="room-name">側門走廊</div>
+                  </div>
+                </div>
+              </div>
+              <div class="building">
+                <div class="building-label">宿舍區</div>
+                <div class="room-row">
+                  <div class="room" style="background:rgba(0,255,163,.04);border-color:rgba(0,255,163,.2)">
+                    <div class="room-indicator ri-l"></div>
+                    <div class="room-count" style="color:var(--safe)">12</div>
+                    <div class="room-name">公共空間</div>
+                  </div>
+                  <div class="room">
+                    <div class="room-count" style="color:var(--text-muted)">1</div>
+                    <div class="room-name">洗衣間</div>
+                  </div>
+                </div>
+              </div>
+              <div class="building">
+                <div class="building-label">校門口</div>
+                <div class="room-row">
+                  <div class="room" style="background:rgba(255,184,0,.07);border-color:rgba(255,184,0,.3)">
+                    <div class="room-indicator ri-m"></div>
+                    <div class="room-count" style="color:var(--warn)">22</div>
+                    <div class="room-name">校門口周邊</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Insights -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">💡 AI 分析建議</div></div>
+          <div class="card-body">
+            <div class="insight-card">
+              <div class="insight-icon">⚠️</div>
+              <div>
+                <div class="insight-title">廁所外走廊為最高風險熱點</div>
+                <div class="insight-desc">B棟廁所外走廊佔本月 37% 違規，建議在此加裝除煙劑噴灑裝置或增加巡查頻率。</div>
+              </div>
+            </div>
+            <div class="insight-card">
+              <div class="insight-icon">🕐</div>
+              <div>
+                <div class="insight-title">下課時間（12–13時）為高峰</div>
+                <div class="insight-desc">午休下課後是最高風險時段，佔整日違規 32%，建議此時段加強監控靈敏度。</div>
+              </div>
+            </div>
+            <div class="insight-card">
+              <div class="insight-icon">📉</div>
+              <div>
+                <div class="insight-title">系統介入後違規下降 12%</div>
+                <div class="insight-desc">自上月系統上線後，整體違規事件已下降，廣播警示嚇阻效果顯著。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="tooltip-box" id="tooltip"></div>
+
+<script src="shared.js"></script>
+<script>
+injectShell('熱點分析');
+
+const DAYS = ['週一','週二','週三','週四','週五','週六','週日'];
+const SLOTS = ['07–09','09–11','11–13','13–15','15–17','17–19','19–21','21–23'];
+
+const BASE_DATA = [
+  [1,2,3,5,4,2,1,0],
+  [0,1,2,8,6,3,1,0],
+  [2,3,4,6,7,4,2,1],
+  [1,2,3,7,5,3,1,0],
+  [0,1,2,4,3,2,1,0],
+  [3,5,7,8,6,4,2,1],
+  [2,4,6,5,3,1,0,0],
+];
+
+const LOC_DATA = {
+  '0': [[0,1,2,4,3,1,0,0],[0,0,1,5,3,2,0,0],[1,2,3,4,5,2,1,0],[0,1,2,5,4,2,1,0],[0,0,1,2,2,1,0,0],[1,3,5,6,4,2,1,0],[1,2,4,3,2,1,0,0]],
+  '1': [[0,1,1,3,2,1,0,0],[0,0,1,4,3,1,0,0],[1,1,2,3,4,2,1,0],[0,1,1,4,3,2,0,0],[0,0,1,2,2,1,0,0],[1,2,3,4,3,2,1,0],[1,2,3,2,2,0,0,0]],
+  '2': [[0,0,1,2,1,1,1,0],[0,0,1,2,2,1,1,0],[0,1,1,2,2,1,1,1],[0,0,1,2,1,1,0,0],[0,0,1,1,1,1,0,0],[1,1,2,3,2,1,1,1],[0,1,1,1,1,1,0,0]],
+  '3': [[0,1,1,2,1,1,0,0],[0,1,1,3,2,1,0,0],[1,1,1,2,2,2,1,0],[0,1,1,2,2,1,0,0],[0,1,1,2,1,1,0,0],[1,2,3,3,2,2,1,0],[1,2,2,2,1,1,0,0]],
+};
+
+function updateHeatmap(key) {
+  const data = key === 'all' ? BASE_DATA : LOC_DATA[key] || BASE_DATA;
+  buildWeekHeatmap(data);
+}
+
+function buildWeekHeatmap(data) {
+  const hm = document.getElementById('weekHeatmap');
+  hm.innerHTML = '';
+  const max = Math.max(...data.flat());
+  const tooltip = document.getElementById('tooltip');
+
+  const corner = document.createElement('div'); corner.className='hm-header'; hm.appendChild(corner);
+  SLOTS.forEach(s=>{ const h=document.createElement('div'); h.className='hm-header'; h.textContent=s.split('–')[0]; hm.appendChild(h); });
+
+  DAYS.forEach((day,di)=>{
+    const label=document.createElement('div'); label.className='hm-label'; label.textContent=day; hm.appendChild(label);
+    data[di].forEach((v,si)=>{
+      const cell=document.createElement('div'); cell.className='hm-cell';
+      const t=v/max;
+      const r=Math.round(t*255), g=Math.round(58+t*(10-58)), b=Math.round(92+t*(20-92));
+      cell.style.background=v===0?'rgba(0,180,255,.04)':`rgba(${r},${g},${b},${.1+t*.85})`;
+      if(v>0) cell.textContent=v;
+      cell.addEventListener('mousemove',e=>{ tooltip.style.display='block'; tooltip.style.left=(e.clientX+12)+'px'; tooltip.style.top=(e.clientY-30)+'px'; tooltip.textContent=`${day} ${SLOTS[si]}：${v} 件`; });
+      cell.addEventListener('mouseleave',()=>{ tooltip.style.display='none'; });
+      hm.appendChild(cell);
+    });
+  });
+}
+
+// Monthly calendar heatmap
+function buildMonthHeatmap() {
+  const hm = document.getElementById('monthHeatmap');
+  const WEEKDAYS = ['日','一','二','三','四','五','六'];
+  WEEKDAYS.forEach(d=>{ const h=document.createElement('div'); h.style.cssText='font-family:var(--font-mono);font-size:.6rem;color:var(--text-muted);text-align:center;padding:.2rem 0'; h.textContent=d; hm.appendChild(h); });
+  // May 2025 starts Thursday (4)
+  for(let i=0;i<4;i++){ const e=document.createElement('div'); hm.appendChild(e); }
+  for(let d=1;d<=31;d++){
+    const v=d>23?0:[0,1,2,0,3,8,5,2,1,4,7,3,2,1,9,6,4,3,0,2,8,4,1][d-1]||0;
+    const cell=document.createElement('div');
+    cell.style.cssText=`aspect-ratio:1;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:.6rem;cursor:default;transition:transform .15s;`;
+    cell.style.background=v===0?'rgba(255,255,255,.04)':v<=2?'rgba(0,255,163,.15)':v<=6?'rgba(255,184,0,.25)':'rgba(255,58,92,.35)';
+    cell.style.color=v===0?'var(--text-muted)':v<=2?'var(--safe)':v<=6?'var(--warn)':'var(--danger)';
+    cell.textContent=d;
+    if(d===23) cell.style.outline='1px solid var(--accent)';
+    hm.appendChild(cell);
+  }
+}
+
+buildWeekHeatmap(BASE_DATA);
+buildMonthHeatmap();
+</script>
+</body>
+</html>

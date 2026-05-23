@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 系統設定</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.settings-nav { display:flex; flex-direction:column; gap:.2rem; background:var(--surface); border:1px solid var(--border); padding:.6rem; }
+.snav-item { padding:.6rem .9rem; font-size:.85rem; cursor:pointer; color:var(--text-muted); border-left:2px solid transparent; transition:all .2s; }
+.snav-item:hover { color:var(--text); background:rgba(0,180,255,.04); }
+.snav-item.active { color:var(--accent); border-left-color:var(--accent); background:rgba(0,180,255,.07); }
+.settings-panel { display:none; }
+.settings-panel.show { display:block; }
+.setting-group { margin-bottom:1.2rem; }
+.setting-group-title { font-family:var(--font-mono); font-size:.65rem; color:var(--accent); letter-spacing:.12em; text-transform:uppercase; margin-bottom:.6rem; padding-bottom:.4rem; border-bottom:1px solid var(--border); }
+.setting-row { display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; border-bottom:1px solid rgba(255,255,255,.04); }
+.setting-row:last-child { border-bottom:none; }
+.setting-info .sname { font-size:.87rem; }
+.setting-info .sdesc { font-size:.75rem; color:var(--text-muted); margin-top:.15rem; }
+.toggle { position:relative;display:inline-block;width:42px;height:22px; }
+.toggle input { opacity:0;width:0;height:0; }
+.toggle-slider { position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:22px;transition:.3s; }
+.toggle-slider::before { content:'';position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:var(--text-muted);transition:.3s;border-radius:50%; }
+input:checked+.toggle-slider { background:rgba(0,180,255,.2);border-color:var(--accent); }
+input:checked+.toggle-slider::before { transform:translateX(20px);background:var(--accent); }
+.cam-config-card { background:var(--surface2); border:1px solid var(--border); margin-bottom:.6rem; }
+.cam-config-header { display:flex; align-items:center; gap:.8rem; padding:.7rem 1rem; border-bottom:1px solid var(--border); cursor:pointer; }
+.cam-config-body { padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
+.status-badge { display:flex; align-items:center; gap:.4rem; font-family:var(--font-mono); font-size:.68rem; margin-left:auto; }
+.sb-dot { width:7px; height:7px; border-radius:50%; }
+.range-wrap { display:flex; align-items:center; gap:.7rem; }
+.range-wrap input[type=range] { flex:1; accent-color:var(--accent); }
+.range-val { font-family:var(--font-mono); font-size:.75rem; color:var(--accent); width:36px; text-align:right; }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <div class="grid-1-2" style="align-items:start">
+      <!-- Nav -->
+      <div class="settings-nav">
+        <div class="snav-item active" onclick="showPanel('ai',this)">🤖 AI 辨識參數</div>
+        <div class="snav-item" onclick="showPanel('cameras',this)">📹 攝影機設定</div>
+        <div class="snav-item" onclick="showPanel('sensor',this)">🌡️ 感測器設定</div>
+        <div class="snav-item" onclick="showPanel('privacy',this)">🔒 隱私與安全</div>
+        <div class="snav-item" onclick="showPanel('system',this)">⚙️ 系統維護</div>
+        <div class="snav-item" onclick="showPanel('about',this)">ℹ️ 關於系統</div>
+      </div>
+
+      <!-- Panels -->
+      <div>
+
+        <!-- AI Panel -->
+        <div class="settings-panel show card" id="panel-ai">
+          <div class="card-header"><div class="card-title">🤖 AI 辨識參數</div><button class="btn btn-accent" onclick="saveAI()" style="font-size:.75rem">儲存</button></div>
+          <div class="card-body">
+            <div class="setting-group">
+              <div class="setting-group-title">YOLOv8 物件偵測</div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">信心度閾值（人物偵測）</div><div class="sdesc">低於此值的人物偵測結果將被忽略</div></div>
+                <div class="range-wrap"><input type="range" min="50" max="99" value="75" oninput="document.getElementById('rv0').textContent=this.value+'%'"><span class="range-val" id="rv0">75%</span></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">信心度閾值（香菸偵測）</div><div class="sdesc">小物件偵測門檻，建議 60-80%</div></div>
+                <div class="range-wrap"><input type="range" min="40" max="99" value="65" oninput="document.getElementById('rv1').textContent=this.value+'%'"><span class="range-val" id="rv1">65%</span></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">推論解析度</div><div class="sdesc">較高解析度準確率更高但速度較慢</div></div>
+                <select class="input-field" style="width:120px"><option>640×640</option><option selected>640×480</option><option>416×416</option><option>320×320</option></select>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">目標 FPS</div><div class="sdesc">每秒推論幀數（影響 CPU/GPU 負載）</div></div>
+                <div class="range-wrap"><input type="range" min="5" max="30" value="30" oninput="document.getElementById('rv2').textContent=this.value"><span class="range-val" id="rv2">30</span></div>
+              </div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-group-title">MediaPipe 姿態估計</div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">手口距離閾值（像素）</div><div class="sdesc">手部與嘴巴距離小於此值觸發姿態判定</div></div>
+                <div class="range-wrap"><input type="range" min="20" max="100" value="50" oninput="document.getElementById('rv3').textContent=this.value+'px'"><span class="range-val" id="rv3">50px</span></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">持續時間閾值（秒）</div><div class="sdesc">手部動作持續多少秒才判定為吸菸姿態</div></div>
+                <div class="range-wrap"><input type="range" min="1" max="10" value="3" oninput="document.getElementById('rv4').textContent=this.value+'s'"><span class="range-val" id="rv4">3s</span></div>
+              </div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-group-title">多模態融合</div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">融合綜合閾值</div><div class="sdesc">三路信心度加權後高於此值才發出警示</div></div>
+                <div class="range-wrap"><input type="range" min="60" max="99" value="80" oninput="document.getElementById('rv5').textContent=this.value+'%'"><span class="range-val" id="rv5">80%</span></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">感測器權重</div><div class="sdesc">感測器數據在融合判斷中的比重</div></div>
+                <div class="range-wrap"><input type="range" min="0" max="100" value="30" oninput="document.getElementById('rv6').textContent=this.value+'%'"><span class="range-val" id="rv6">30%</span></div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info"><div class="sname">啟用多模態融合</div><div class="sdesc">關閉後僅使用影像判斷（準確率降低）</div></div>
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cameras Panel -->
+        <div class="settings-panel card" id="panel-cameras">
+          <div class="card-header"><div class="card-title">📹 攝影機設定</div><button class="btn btn-accent" onclick="saveCameras()" style="font-size:.75rem">儲存</button></div>
+          <div class="card-body">
+            <div class="setting-group-title">攝影機清單</div>
+            ${[
+              ['CAM-01','廁所外走廊 B棟','rtsp://192.168.1.101:554/stream1',true,'danger'],
+              ['CAM-02','樓梯間 A棟','rtsp://192.168.1.102:554/stream1',true,'warn'],
+              ['CAM-03','宿舍公共空間','rtsp://192.168.1.103:554/stream1',true,'safe'],
+              ['CAM-04','校門口周邊','rtsp://192.168.1.104:554/stream1',true,'safe'],
+            ].map(([id,loc,url,online,col])=>`
+            <div class="cam-config-card">
+              <div class="cam-config-header">
+                <span style="font-family:var(--font-mono);font-size:.8rem;color:var(--accent)">${id}</span>
+                <span style="font-size:.85rem">${loc}</span>
+                <div class="status-badge"><div class="sb-dot" style="background:var(--${col})"></div><span style="color:var(--${col})">${online?'上線':'離線'}</span></div>
+              </div>
+              <div class="cam-config-body">
+                <div class="form-group"><div class="form-label">名稱</div><input type="text" class="input-field" value="${loc}"></div>
+                <div class="form-group"><div class="form-label">位置描述</div><input type="text" class="input-field" value="${loc}"></div>
+                <div class="form-group" style="grid-column:1/-1"><div class="form-label">RTSP 串流 URL</div><input type="text" class="input-field" value="${url}"></div>
+                <div class="form-group"><div class="form-label">解析度</div><select class="input-field"><option>1920×1080</option><option selected>1280×720</option><option>640×480</option></select></div>
+                <div class="form-group"><div class="form-label">動作</div><div style="display:flex;gap:.4rem"><button class="btn btn-ghost" style="font-size:.72rem" onclick="showToast('連線測試成功','success')">🔗 測試</button><button class="btn btn-ghost" style="font-size:.72rem" onclick="showToast('攝影機已重啟','warn')">🔄 重啟</button></div></div>
+              </div>
+            </div>`).join('')}
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:.5rem" onclick="showToast('請填寫新攝影機資訊','info')">＋ 新增攝影機</button>
+          </div>
+        </div>
+
+        <!-- Sensor Panel -->
+        <div class="settings-panel card" id="panel-sensor">
+          <div class="card-header"><div class="card-title">🌡️ 感測器設定</div></div>
+          <div class="card-body">
+            <div class="setting-group">
+              <div class="setting-group-title">MQ-135 空氣品質感測器</div>
+              <div class="setting-row"><div class="setting-info"><div class="sname">警示 AQI 閾值</div><div class="sdesc">超過此值觸發感測器警示</div></div><div class="range-wrap"><input type="range" min="100" max="1000" value="300" step="50" oninput="document.getElementById('svr0').textContent=this.value"><span class="range-val" id="svr0">300</span></div></div>
+              <div class="setting-row"><div class="setting-info"><div class="sname">採樣頻率（秒）</div><div class="sdesc">感測器數據更新間隔</div></div><div class="range-wrap"><input type="range" min="1" max="30" value="5" oninput="document.getElementById('svr1').textContent=this.value+'s'"><span class="range-val" id="svr1">5s</span></div></div>
+              <div class="setting-row"><div class="setting-info"><div class="sname">啟用感測器</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy Panel -->
+        <div class="settings-panel card" id="panel-privacy">
+          <div class="card-header"><div class="card-title">🔒 隱私與安全</div></div>
+          <div class="card-body">
+            <div class="setting-row"><div class="setting-info"><div class="sname">非違規者臉部自動打碼</div><div class="sdesc">偵測範圍內非違規人員自動模糊處理</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="sname">打碼強度</div></div><div class="range-wrap"><input type="range" min="5" max="30" value="15" oninput="document.getElementById('pvr0').textContent=this.value+'px'"><span class="range-val" id="pvr0">15px</span></div></div>
+            <div class="setting-row"><div class="setting-info"><div class="sname">影像保留天數</div><div class="sdesc">超過天數後自動刪除影像紀錄</div></div><select class="input-field" style="width:100px"><option>7天</option><option selected>30天</option><option>90天</option></select></div>
+            <div class="setting-row"><div class="setting-info"><div class="sname">僅儲存違規片段</div><div class="sdesc">非違規時段影像不儲存（節省空間）</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+            <div class="setting-row"><div class="setting-info"><div class="sname">存取日誌記錄</div><div class="sdesc">記錄所有後台操作紀錄</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+          </div>
+        </div>
+
+        <!-- System Panel -->
+        <div class="settings-panel card" id="panel-system">
+          <div class="card-header"><div class="card-title">⚙️ 系統維護</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.8rem">
+            <div style="background:var(--surface2);border:1px solid var(--border);padding:1rem;display:grid;grid-template-columns:1fr 1fr;gap:.6rem;font-family:var(--font-mono);font-size:.75rem">
+              <div><span style="color:var(--text-muted)">系統版本</span><br><span style="color:var(--accent)">SmokeSentry v1.2.0</span></div>
+              <div><span style="color:var(--text-muted)">YOLOv8 模型</span><br><span>yolov8n-smoking.pt</span></div>
+              <div><span style="color:var(--text-muted)">CPU 使用率</span><br><span style="color:var(--safe)">34%</span></div>
+              <div><span style="color:var(--text-muted)">記憶體使用</span><br><span style="color:var(--warn)">2.4 / 8 GB</span></div>
+              <div><span style="color:var(--text-muted)">儲存空間</span><br><span style="color:var(--safe)">42 / 500 GB</span></div>
+              <div><span style="color:var(--text-muted)">運行時間</span><br><span>14天 06:32:18</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+              <button class="btn btn-ghost" style="justify-content:center" onclick="showToast('模型重新載入完成','success')">🔄 重新載入 AI 模型</button>
+              <button class="btn btn-ghost" style="justify-content:center" onclick="showToast('系統快取已清除','success')">🗑 清除快取</button>
+              <button class="btn btn-ghost" style="justify-content:center" onclick="showToast('備份建立中…','info')">💾 備份設定</button>
+              <button class="btn btn-ghost" style="justify-content:center" onclick="showToast('匯入成功','success')">📤 匯入設定</button>
+              <button class="btn btn-danger" style="justify-content:center;grid-column:1/-1" onclick="confirmRestart()">⚠️ 重新啟動系統</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- About Panel -->
+        <div class="settings-panel card" id="panel-about">
+          <div class="card-header"><div class="card-title">ℹ️ 關於 SmokeSentry AI</div></div>
+          <div class="card-body" style="font-size:.88rem;line-height:1.9;color:var(--text-muted)">
+            <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:800;color:var(--text);margin-bottom:.5rem">SmokeSentry <span style="color:var(--accent)">AI</span></div>
+            <div style="font-family:var(--font-mono);font-size:.72rem;color:var(--accent);margin-bottom:1.2rem">校園吸煙行為智慧辨識與預警系統 v1.2.0</div>
+            <p>本系統採用三層式多模態架構，整合 YOLOv8 物件偵測、MediaPipe 姿態估計與 MQ-135 環境感測，提供準確率達 94% 的即時吸菸行為辨識能力。</p>
+            <hr style="border-color:var(--border);margin:1rem 0">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-family:var(--font-mono);font-size:.72rem">
+              <div style="color:var(--text-muted)">AI 引擎</div><div style="color:var(--text)">YOLOv8 + MediaPipe</div>
+              <div style="color:var(--text-muted)">感測器</div><div style="color:var(--text)">MQ-135 AQI</div>
+              <div style="color:var(--text-muted)">通報管道</div><div style="color:var(--text)">Email + LINE Bot</div>
+              <div style="color:var(--text-muted)">隱私保護</div><div style="color:var(--text)">自動臉部打碼</div>
+              <div style="color:var(--text-muted)">辨識準確率</div><div style="color:var(--safe)">94.2%</div>
+              <div style="color:var(--text-muted)">平均延遲</div><div style="color:var(--safe)">&lt; 1.2 秒</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+injectShell('系統設定');
+
+function showPanel(name, el) {
+  document.querySelectorAll('.settings-panel').forEach(p=>p.classList.remove('show'));
+  document.querySelectorAll('.snav-item').forEach(i=>i.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('show');
+  el.classList.add('active');
+}
+
+function saveAI() { showToast('AI 參數已儲存並重新載入模型', 'success'); }
+function saveCameras() { showToast('攝影機設定已儲存', 'success'); }
+function confirmRestart() {
+  if(confirm('確定要重新啟動系統？所有監控將暫時中斷約 30 秒。')) {
+    showToast('系統重新啟動中… 預計 30 秒後恢復', 'warn', 5000);
+  }
+}
+</script>
+</body>
+</html>

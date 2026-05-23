@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 違規紀錄</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.search-bar { display:flex; gap:.6rem; margin-bottom:1rem; flex-wrap:wrap; }
+.search-input-wrap { position:relative; flex:1; min-width:200px; }
+.search-icon { position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:.85rem; pointer-events:none; }
+.search-input { padding:.55rem .9rem .55rem 2rem; }
+.filter-group { display:flex; gap:.4rem; flex-wrap:wrap; }
+.f-select { background:var(--surface2); border:1px solid var(--border); color:var(--text-muted); padding:.5rem .8rem; font-family:var(--font-mono); font-size:.72rem; cursor:pointer; transition:border-color .2s; }
+.f-select:hover, .f-select:focus { border-color:var(--accent); outline:none; }
+.results-info { font-family:var(--font-mono); font-size:.72rem; color:var(--text-muted); margin-bottom:.6rem; }
+.results-info span { color:var(--accent); }
+.thumb {
+  width:48px; height:36px; background:#050a0f; border:1px solid var(--border);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.6rem; color:var(--text-muted); cursor:pointer; transition:border-color .2s; overflow:hidden; flex-shrink:0;
+}
+.thumb:hover { border-color:var(--accent); }
+.thumb canvas { width:100%; height:100%; }
+.row-actions { display:flex; gap:.3rem; }
+.row-btn { padding:.2rem .55rem; font-family:var(--font-mono); font-size:.62rem; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; transition:all .2s; white-space:nowrap; }
+.row-btn:hover { border-color:var(--accent); color:var(--accent); }
+.row-btn.danger:hover { border-color:var(--danger); color:var(--danger); }
+.pagination { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.2rem; border-top:1px solid var(--border); }
+.page-btns { display:flex; gap:.3rem; }
+.page-btn { padding:.3rem .7rem; font-family:var(--font-mono); font-size:.72rem; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; transition:all .2s; }
+.page-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(0,180,255,.08); }
+.page-btn:hover { border-color:var(--accent); color:var(--accent); }
+.detail-panel {
+  position:fixed; right:0; top:0; bottom:0; width:380px;
+  background:var(--surface); border-left:1px solid var(--border);
+  z-index:150; transform:translateX(100%); transition:transform .3s ease;
+  display:flex; flex-direction:column;
+}
+.detail-panel.open { transform:translateX(0); }
+.detail-header { padding:1.2rem; border-bottom:1px solid var(--border); background:var(--surface2); display:flex; align-items:center; justify-content:space-between; }
+.detail-body { flex:1; overflow-y:auto; padding:1.2rem; display:flex; flex-direction:column; gap:1rem; }
+.detail-cam { width:100%; aspect-ratio:16/10; background:#050a0f; border:1px solid var(--border); position:relative; overflow:hidden; }
+.detail-row { display:flex; justify-content:space-between; font-size:.83rem; padding:.4rem 0; border-bottom:1px solid rgba(255,255,255,.04); }
+.detail-key { color:var(--text-muted); }
+.detail-val { font-family:var(--font-mono); font-size:.78rem; }
+.detail-footer { padding:1rem 1.2rem; border-top:1px solid var(--border); display:flex; gap:.5rem; }
+.conf-bar-wrap { margin-top:.4rem; }
+.conf-bar-label { font-family:var(--font-mono); font-size:.65rem; color:var(--text-muted); display:flex; justify-content:space-between; margin-bottom:.2rem; }
+.conf-bar-track { height:5px; background:rgba(255,255,255,.06); border-radius:3px; overflow:hidden; }
+.conf-bar-fill { height:100%; border-radius:3px; }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <!-- Stat row -->
+    <div class="stat-row" style="margin-bottom:1rem">
+      <div class="stat-card danger"><div class="sc-label">本月違規</div><div class="sc-value" style="color:var(--danger)">87</div><div class="sc-sub">本月累計紀錄</div></div>
+      <div class="stat-card"><div class="sc-label">今日違規</div><div class="sc-value" style="color:var(--accent)">23</div><div class="sc-sub">今日新增</div></div>
+      <div class="stat-card safe"><div class="sc-label">已通報</div><div class="sc-value" style="color:var(--safe)">74</div><div class="sc-sub">已通報管理者</div></div>
+      <div class="stat-card warn"><div class="sc-label">觀察中</div><div class="sc-value" style="color:var(--warn)">13</div><div class="sc-sub">持續監控</div></div>
+    </div>
+
+    <!-- Search & filter -->
+    <div class="search-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="input-field search-input" id="searchInput" placeholder="搜尋地點、時間、攝影機…" oninput="filterRecords()">
+      </div>
+      <div class="filter-group">
+        <select class="f-select" id="fType" onchange="filterRecords()">
+          <option value="">全部類型</option>
+          <option value="吸菸">吸菸（確認）</option>
+          <option value="點煙">點煙行為</option>
+          <option value="疑似">疑似違規</option>
+        </select>
+        <select class="f-select" id="fCam" onchange="filterRecords()">
+          <option value="">全部攝影機</option>
+          <option value="CAM-01">CAM-01</option>
+          <option value="CAM-02">CAM-02</option>
+          <option value="CAM-03">CAM-03</option>
+          <option value="CAM-04">CAM-04</option>
+        </select>
+        <select class="f-select" id="fStatus" onchange="filterRecords()">
+          <option value="">全部狀態</option>
+          <option value="已通報">已通報</option>
+          <option value="已警示">已警示</option>
+          <option value="觀察中">觀察中</option>
+        </select>
+        <button class="btn btn-ghost" onclick="resetFilters()">✕ 清除</button>
+        <button class="btn btn-accent" onclick="exportAll()">📥 匯出</button>
+      </div>
+    </div>
+
+    <div class="results-info" id="resultsInfo"></div>
+
+    <!-- Table -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="scroll-area" style="max-height:calc(100vh - 340px)">
+        <table class="data-table" id="recordTable">
+          <thead>
+            <tr>
+              <th style="width:48px">影像</th>
+              <th onclick="sortBy('time')" style="cursor:pointer">時間 ↕</th>
+              <th>攝影機</th>
+              <th>地點</th>
+              <th onclick="sortBy('type')" style="cursor:pointer">類型 ↕</th>
+              <th onclick="sortBy('conf')" style="cursor:pointer">信心度 ↕</th>
+              <th>感測器</th>
+              <th>狀態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="recordBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)" id="pageInfo">顯示 1–15 / 87 筆</div>
+        <div class="page-btns">
+          <button class="page-btn" onclick="changePage(-1)">← 上頁</button>
+          <button class="page-btn active" id="p1">1</button>
+          <button class="page-btn" id="p2">2</button>
+          <button class="page-btn" id="p3">3</button>
+          <span style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-muted);padding:.3rem .4rem">…</span>
+          <button class="page-btn">6</button>
+          <button class="page-btn" onclick="changePage(1)">下頁 →</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Detail panel -->
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-header">
+    <div style="font-family:var(--font-display);font-weight:700;font-size:.95rem">事件詳情</div>
+    <button class="modal-close" onclick="closeDetail()" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer">✕</button>
+  </div>
+  <div class="detail-body" id="detailBody"></div>
+  <div class="detail-footer">
+    <button class="btn btn-danger" onclick="notifyFromDetail()" style="flex:1;justify-content:center">📨 通報</button>
+    <button class="btn btn-ghost" onclick="closeDetail()" style="flex:1;justify-content:center">關閉</button>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+injectShell('違規紀錄');
+
+// Generate records
+const LOCS = ['廁所外走廊 B棟','樓梯間 A棟','宿舍公共空間','校門口周邊'];
+const CAMS = ['CAM-01','CAM-02','CAM-03','CAM-04'];
+const TYPES = ['吸菸','點煙','疑似'];
+const STATUSES = ['已通報','已警示','觀察中'];
+const AQLV = [847,312,98,115];
+
+function pad(n){return String(n).padStart(2,'0');}
+function randH(a,b){return Math.floor(a+Math.random()*(b-a));}
+
+const ALL_RECORDS = Array.from({length:87},(_,i)=>{
+  const locIdx=randH(0,4), typeIdx=randH(0,3);
+  const d=23-Math.floor(i/4); const h=randH(7,22); const m=randH(0,59); const s=randH(0,59);
+  return {
+    id:i+1,
+    time:`2025-05-${pad(d)} ${pad(h)}:${pad(m)}:${pad(s)}`,
+    cam:CAMS[locIdx],
+    loc:LOCS[locIdx],
+    type:TYPES[typeIdx],
+    conf:typeIdx===0?randH(88,98):typeIdx===1?randH(75,92):randH(55,75),
+    aqi:AQLV[locIdx]+randH(-40,80),
+    status:typeIdx===2?'觀察中':i%4===0?'已通報':'已警示',
+  };
+}).sort((a,b)=>b.time.localeCompare(a.time));
+
+let filtered = [...ALL_RECORDS];
+let currentPage = 1;
+const PER_PAGE = 15;
+let sortKey = 'time', sortAsc = false;
+let currentDetail = null;
+
+function filterRecords() {
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  const ft=document.getElementById('fType').value;
+  const fc=document.getElementById('fCam').value;
+  const fs=document.getElementById('fStatus').value;
+  filtered=ALL_RECORDS.filter(r=>{
+    if(q && !r.time.includes(q) && !r.loc.toLowerCase().includes(q) && !r.cam.toLowerCase().includes(q) && !r.type.includes(q)) return false;
+    if(ft && r.type!==ft) return false;
+    if(fc && r.cam!==fc) return false;
+    if(fs && r.status!==fs) return false;
+    return true;
+  });
+  currentPage=1; render();
+}
+
+function resetFilters() {
+  document.getElementById('searchInput').value='';
+  document.getElementById('fType').value='';
+  document.getElementById('fCam').value='';
+  document.getElementById('fStatus').value='';
+  filterRecords();
+}
+
+function sortBy(key) {
+  if(sortKey===key) sortAsc=!sortAsc; else { sortKey=key; sortAsc=false; }
+  filtered.sort((a,b)=>{
+    let av=a[key],bv=b[key];
+    if(key==='conf'){av=+av;bv=+bv;}
+    return sortAsc?(av>bv?1:-1):(av<bv?1:-1);
+  });
+  render();
+}
+
+function changePage(d) {
+  const maxP=Math.ceil(filtered.length/PER_PAGE);
+  currentPage=Math.max(1,Math.min(maxP,currentPage+d));
+  render();
+}
+
+const TYPE_CLS={吸菸:'badge-danger',點煙:'badge-warn',疑似:'badge-safe'};
+const ST_CLS={'已通報':'badge-danger','已警示':'badge-warn','觀察中':'badge-safe'};
+
+function render() {
+  const start=(currentPage-1)*PER_PAGE, end=Math.min(start+PER_PAGE,filtered.length);
+  document.getElementById('resultsInfo').innerHTML=`共找到 <span>${filtered.length}</span> 筆紀錄`;
+  document.getElementById('pageInfo').textContent=`顯示 ${start+1}–${end} / ${filtered.length} 筆`;
+
+  const body=document.getElementById('recordBody');
+  body.innerHTML=filtered.slice(start,end).map(r=>`
+    <tr>
+      <td><div class="thumb" onclick="openDetail(${r.id})"><canvas id="th${r.id}" width="48" height="36"></canvas></div></td>
+      <td style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-muted)">${r.time.split(' ')[1]}<br><span style="font-size:.62rem">${r.time.split(' ')[0]}</span></td>
+      <td style="font-family:var(--font-mono);font-size:.78rem;color:var(--accent)">${r.cam}</td>
+      <td style="font-size:.82rem">${r.loc}</td>
+      <td><span class="badge ${TYPE_CLS[r.type]||'badge-blue'}">${r.type}</span></td>
+      <td><span style="font-family:var(--font-mono);font-size:.78rem;color:${r.conf>=88?'var(--safe)':r.conf>=75?'var(--warn)':'var(--danger)'}">${r.conf}%</span></td>
+      <td style="font-family:var(--font-mono);font-size:.72rem;color:${r.aqi>500?'var(--danger)':r.aqi>200?'var(--warn)':'var(--safe)'}">${r.aqi}</td>
+      <td><span class="badge ${ST_CLS[r.status]||'badge-blue'}">${r.status}</span></td>
+      <td><div class="row-actions">
+        <button class="row-btn" onclick="openDetail(${r.id})">詳情</button>
+        <button class="row-btn danger" onclick="notifyRecord(${r.id})">通報</button>
+      </div></td>
+    </tr>`).join('');
+
+  // Draw mini thumbnails
+  requestAnimationFrame(()=>{
+    filtered.slice(start,end).forEach(r=>{
+      const cv=document.getElementById('th'+r.id); if(!cv) return;
+      const ctx=cv.getContext('2d'); const W=48,H=36;
+      ctx.fillStyle='#050a0f'; ctx.fillRect(0,0,W,H);
+      ctx.strokeStyle='rgba(0,180,255,.05)'; ctx.lineWidth=.5;
+      for(let x=0;x<W;x+=8){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+      for(let y=0;y<H;y+=8){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+      // Person silhouette
+      const col=r.type==='吸菸'?'255,58,92':r.type==='點煙'?'255,184,0':'0,255,163';
+      ctx.fillStyle='rgba(255,210,170,.6)'; ctx.beginPath(); ctx.arc(W*.45,H*.25,4,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(60,80,130,.7)'; ctx.fillRect(W*.38,H*.38,W*.16,H*.35);
+      if(r.type!=='疑似'){
+        ctx.strokeStyle=`rgba(${col},.8)`; ctx.lineWidth=1.2;
+        ctx.strokeRect(W*.3,H*.1,W*.35,H*.75);
+      }
+    });
+  });
+
+  // Update page buttons
+  [1,2,3].forEach(n=>{
+    const btn=document.getElementById('p'+n); if(!btn) return;
+    btn.textContent=currentPage-1+n;
+    btn.classList.toggle('active',currentPage-1+n===currentPage);
+  });
+}
+
+function openDetail(id) {
+  const r=filtered.find(x=>x.id===id)||ALL_RECORDS.find(x=>x.id===id);
+  if(!r) return;
+  currentDetail=r;
+  document.getElementById('detailBody').innerHTML=`
+    <div class="detail-cam">
+      <canvas id="detailCam" style="width:100%;height:100%"></canvas>
+    </div>
+    <div>
+      ${[
+        ['事件編號','#'+String(r.id).padStart(4,'0')],
+        ['時間',r.time],
+        ['攝影機',r.cam],
+        ['地點',r.loc],
+        ['類型',r.type],
+        ['狀態',r.status],
+        ['感測器 AQI',r.aqi],
+      ].map(([k,v])=>`<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${v}</span></div>`).join('')}
+    </div>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:.68rem;color:var(--text-muted);margin-bottom:.6rem;letter-spacing:.08em">CONFIDENCE BREAKDOWN</div>
+      ${[['YOLOv8 物件',r.conf-2],['MediaPipe 姿態',r.conf+1],['感測器融合',r.conf-4],['綜合信心度',r.conf]].map(([l,v])=>`
+      <div class="conf-bar-wrap">
+        <div class="conf-bar-label"><span>${l}</span><span>${Math.max(0,v)}%</span></div>
+        <div class="conf-bar-track"><div class="conf-bar-fill" style="width:${Math.max(0,v)}%;background:${v>=88?'var(--safe)':v>=75?'var(--warn)':'var(--danger)'}"></div></div>
+      </div>`).join('')}
+    </div>`;
+  document.getElementById('detailPanel').classList.add('open');
+
+  // Draw detail cam
+  requestAnimationFrame(()=>{
+    const cv=document.getElementById('detailCam'); if(!cv) return;
+    const ctx=cv.getContext('2d'); const W=cv.offsetWidth||350,H=cv.offsetHeight||200;
+    cv.width=W; cv.height=H;
+    ctx.fillStyle='#050a0f'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(0,180,255,.05)'; ctx.lineWidth=.8;
+    for(let x=0;x<W;x+=20){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    const px=W*.38,py=H*.1,bw=W*.13,bh=H*.7;
+    ctx.fillStyle='rgba(255,210,170,.7)'; ctx.beginPath(); ctx.arc(px+bw/2,py+bw*.4,bw*.4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(60,80,130,.75)'; ctx.fillRect(px,py+bw*.8+2,bw,bh*.5);
+    const col=r.type==='吸菸'?'255,58,92':r.type==='點煙'?'255,184,0':'0,255,163';
+    ctx.strokeStyle=`rgba(${col},.8)`; ctx.lineWidth=1.5;
+    ctx.strokeRect(px-5,py-5,bw+10,bh+10);
+    ctx.fillStyle=`rgba(${col},.9)`; ctx.fillRect(px-5,py-22,r.type.length*9+20,18);
+    ctx.fillStyle=r.type==='疑似'?'#000':'#fff'; ctx.font=`bold ${W*.032}px JetBrains Mono,monospace`;
+    ctx.fillText(`${r.type} ${r.conf}%`,px-2,py-8);
+    // HUD
+    ctx.fillStyle='rgba(0,180,255,.6)'; ctx.font=`${W*.028}px JetBrains Mono,monospace`;
+    ctx.fillText(`${r.cam} | ${r.time.split(' ')[1]}`,8,16);
+    if(r.type==='吸菸'){ctx.fillStyle=`rgba(255,58,92,.7)`;ctx.font=`bold ${W*.028}px JetBrains Mono,monospace`;ctx.fillText('⚠ SMOKING DETECTED',8,H-10);}
+  });
+}
+
+function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); }
+function notifyRecord(id) { showToast(`已發送通報 — 事件 #${String(id).padStart(4,'0')}`, 'success'); }
+function notifyFromDetail() { if(currentDetail) notifyRecord(currentDetail.id); }
+function exportAll() {
+  const rows=[['編號','時間','攝影機','地點','類型','信心度','AQI','狀態'],...filtered.map(r=>[r.id,r.time,r.cam,r.loc,r.type,r.conf+'%',r.aqi,r.status])];
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.map(r=>r.join(',')).join('\n')],{type:'text/csv;charset=utf-8;'}));a.download='SmokeSentry_違規紀錄.csv';a.click();
+  showToast('CSV 已匯出', 'success');
+}
+
+render();
+</script>
+</body>
+</html>

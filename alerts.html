@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 警示管理</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+/* Alert cards */
+.alert-card {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 1.2rem; margin-bottom: .8rem;
+  display: grid; grid-template-columns: 8px 1fr auto;
+  gap: 1rem; align-items: start; transition: border-color .2s;
+}
+.alert-card:hover { border-color: rgba(0,180,255,.25); }
+.alert-card.unread { border-left: 3px solid var(--danger); }
+.alert-card.warn-card { border-left: 3px solid var(--warn); }
+.alert-stripe { width: 8px; }
+.alert-title { font-family: var(--font-display); font-size: .95rem; font-weight: 700; margin-bottom: .3rem; }
+.alert-meta { font-family: var(--font-mono); font-size: .68rem; color: var(--text-muted); display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.alert-desc { font-size: .83rem; color: var(--text-muted); line-height: 1.6; }
+.alert-actions { display: flex; flex-direction: column; gap: .4rem; flex-shrink: 0; }
+.act-btn {
+  padding: .35rem .8rem; font-family: var(--font-mono); font-size: .68rem;
+  border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  cursor: pointer; transition: all .2s; white-space: nowrap;
+}
+.act-btn:hover { border-color: var(--accent); color: var(--accent); }
+.act-btn.sent { border-color: rgba(0,255,163,.3); color: var(--safe); }
+
+/* Notify modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.75);
+  backdrop-filter: blur(6px); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.modal-overlay.show { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  width: 640px; max-width: 95vw; max-height: 90vh;
+  overflow-y: auto; animation: slideIn .25s ease;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.modal-title { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; }
+.modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.3rem; cursor: pointer; transition: color .2s; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.2rem; }
+.modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: .8rem; justify-content: flex-end; }
+
+/* Form */
+.form-group { display: flex; flex-direction: column; gap: .4rem; }
+.form-label { font-family: var(--font-mono); font-size: .68rem; color: var(--text-muted); letter-spacing: .08em; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+
+/* Recipient chips */
+.recipient-area {
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: .6rem; display: flex; flex-wrap: wrap; gap: .4rem; min-height: 48px;
+  cursor: text; transition: border-color .2s;
+}
+.recipient-area:focus-within { border-color: var(--accent); }
+.chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: rgba(0,180,255,.1); border: 1px solid rgba(0,180,255,.25);
+  padding: .2rem .55rem; font-family: var(--font-mono); font-size: .7rem; color: var(--accent);
+}
+.chip-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: .85rem; padding: 0; transition: color .2s; }
+.chip-remove:hover { color: var(--danger); }
+.chip-input { background: none; border: none; outline: none; color: var(--text); font-size: .82rem; font-family: var(--font-body); flex: 1; min-width: 120px; }
+
+/* Notify tabs */
+.ntab-bar { display: flex; border-bottom: 1px solid var(--border); }
+.ntab {
+  padding: .65rem 1.3rem; font-family: var(--font-mono); font-size: .72rem;
+  color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .2s; display: flex; align-items: center; gap: .4rem;
+}
+.ntab:hover { color: var(--text); }
+.ntab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.ntab-panel { display: none; }
+.ntab-panel.show { display: block; }
+
+/* Preview box */
+.preview-box {
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 1rem; font-size: .82rem; line-height: 1.8;
+  max-height: 200px; overflow-y: auto; white-space: pre-wrap;
+  font-family: var(--font-mono); color: var(--text-muted); font-size: .75rem;
+}
+
+/* LINE bot section */
+.line-token-row { display: flex; gap: .5rem; }
+.line-status { display: flex; align-items: center; gap: .5rem; font-family: var(--font-mono); font-size: .75rem; }
+
+/* Admin list */
+.admin-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .7rem 1rem; border-bottom: 1px solid rgba(255,255,255,.04);
+  font-size: .85rem;
+}
+.admin-info { display: flex; flex-direction: column; gap: .15rem; }
+.admin-name { font-weight: 500; }
+.admin-email { font-family: var(--font-mono); font-size: .7rem; color: var(--text-muted); }
+.admin-tags { display: flex; gap: .3rem; }
+
+/* Stat strip */
+.alert-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1rem; }
+.astat { background: var(--surface); border: 1px solid var(--border); padding: 1rem; text-align: center; }
+.astat-num { font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.astat-label { font-family: var(--font-mono); font-size: .62rem; color: var(--text-muted); margin-top: .3rem; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.filter-chip {
+  padding: .3rem .8rem; font-family: var(--font-mono); font-size: .7rem;
+  border: 1px solid var(--border); background: transparent; color: var(--text-muted);
+  cursor: pointer; transition: all .2s;
+}
+.filter-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(0,180,255,.08); }
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main">
+  <div id="topbar-slot"></div>
+  <div class="content">
+
+    <!-- ALERT STATS -->
+    <div class="alert-stats">
+      <div class="astat"><div class="astat-num" style="color:var(--danger)">3</div><div class="astat-label">未處理警示</div></div>
+      <div class="astat"><div class="astat-num" style="color:var(--warn)">23</div><div class="astat-label">今日總警示</div></div>
+      <div class="astat"><div class="astat-num" style="color:var(--safe)">18</div><div class="astat-label">已通報完成</div></div>
+      <div class="astat"><div class="astat-num" style="color:var(--accent)">2.4m</div><div class="astat-label">平均回應時間</div></div>
+    </div>
+
+    <div class="grid-2-1" style="align-items:start">
+      <!-- LEFT: Alert list -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.8rem">
+          <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:700">警示事件列表</div>
+          <button class="btn btn-accent" onclick="openNotifyAll()">📢 全部通報管理者</button>
+        </div>
+
+        <div class="filter-bar">
+          <button class="filter-chip active" onclick="filterAlerts(this,'all')">全部</button>
+          <button class="filter-chip" onclick="filterAlerts(this,'danger')">🔴 吸菸</button>
+          <button class="filter-chip" onclick="filterAlerts(this,'warn')">🟡 點煙/疑似</button>
+          <button class="filter-chip" onclick="filterAlerts(this,'unread')">未處理</button>
+        </div>
+
+        <div id="alertList"></div>
+      </div>
+
+      <!-- RIGHT: Admin + notify settings -->
+      <div style="display:flex;flex-direction:column;gap:1rem">
+
+        <!-- Admin list -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">👥 管理者名單</div>
+            <button class="act-btn" onclick="openAddAdmin()" style="font-size:.65rem">＋ 新增</button>
+          </div>
+          <div id="adminList"></div>
+        </div>
+
+        <!-- LINE Bot status -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">💬 LINE Bot 狀態</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.8rem">
+            <div class="line-status">
+              <span style="width:8px;height:8px;background:var(--safe);border-radius:50%;display:inline-block;animation:pulse 2s infinite"></span>
+              <span style="color:var(--safe)">已連線</span>
+              <span style="color:var(--text-muted)">SmokeSentry Bot</span>
+            </div>
+            <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)">
+              Channel ID: <span style="color:var(--accent)">2006****</span><br>
+              群組: <span style="color:var(--text)">校園安全管理群</span><br>
+              今日推播: <span style="color:var(--warn)">23 則</span>
+            </div>
+            <button class="btn btn-ghost" onclick="testLineBot()" style="font-size:.75rem;justify-content:center">🧪 發送測試訊息</button>
+          </div>
+        </div>
+
+        <!-- Email settings quick -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">📧 Email 通知設定</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.7rem">
+            <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)">
+              SMTP: <span style="color:var(--text)">smtp.gmail.com:587</span><br>
+              寄件人: <span style="color:var(--accent)">smokesentry@school.edu.tw</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:.83rem">
+              <span>立即通報</span>
+              <label class="toggle"><input type="checkbox" checked id="immToggle"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:.83rem">
+              <span>每日摘要</span>
+              <label class="toggle"><input type="checkbox" checked id="sumToggle"><span class="toggle-slider"></span></label>
+            </div>
+            <a href="notify.html" class="btn btn-ghost" style="text-decoration:none;font-size:.75rem;justify-content:center">⚙️ 完整通知設定</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIFY MODAL -->
+<div class="modal-overlay" id="notifyModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">📨 發送警示通報</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Tabs -->
+      <div class="ntab-bar">
+        <div class="ntab active" onclick="switchTab(this,'email')">📧 Email</div>
+        <div class="ntab" onclick="switchTab(this,'line')">💬 LINE Bot</div>
+        <div class="ntab" onclick="switchTab(this,'both')">📡 同步發送</div>
+      </div>
+
+      <!-- EMAIL panel -->
+      <div class="ntab-panel show" id="panel-email">
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem">
+          <div class="form-group">
+            <div class="form-label">收件人</div>
+            <div class="recipient-area" id="recipientArea" onclick="document.getElementById('chipInput').focus()">
+              <span class="chip">王主任 <span style="font-size:.65rem;color:var(--text-muted)">&lt;wang@school.edu.tw&gt;</span><button class="chip-remove" onclick="removeChip(this)">×</button></span>
+              <span class="chip">李組長 <span style="font-size:.65rem;color:var(--text-muted)">&lt;li@school.edu.tw&gt;</span><button class="chip-remove" onclick="removeChip(this)">×</button></span>
+              <input type="text" class="chip-input" id="chipInput" placeholder="輸入 email 後按 Enter 新增…" onkeydown="handleChipInput(event)">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <div class="form-label">緊急程度</div>
+              <select class="input-field" id="urgency">
+                <option value="high">🔴 緊急</option>
+                <option value="med" selected>🟡 一般</option>
+                <option value="low">🟢 低</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <div class="form-label">事件類型</div>
+              <select class="input-field" id="evtType">
+                <option>吸菸行為 (確認)</option>
+                <option>點煙行為 (偵測中)</option>
+                <option>疑似違規 (觀察中)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="form-label">郵件主旨</div>
+            <input type="text" class="input-field" id="mailSubject" value="【SmokeSentry 警示】校園吸菸事件通報 — 廁所外走廊 B棟">
+          </div>
+          <div class="form-group">
+            <div class="form-label">補充說明（選填）</div>
+            <textarea class="input-field" id="mailNote" placeholder="如有需要可補充現場狀況或處理建議…"></textarea>
+          </div>
+          <div class="form-group">
+            <div class="form-label">郵件預覽</div>
+            <div class="preview-box" id="emailPreview"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LINE panel -->
+      <div class="ntab-panel" id="panel-line">
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem">
+          <div class="form-group">
+            <div class="form-label">發送目標</div>
+            <select class="input-field" id="lineTarget">
+              <option>校園安全管理群（推薦）</option>
+              <option>教官室群組</option>
+              <option>學務處群組</option>
+              <option>個別發送（選擇成員）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">訊息模板</div>
+            <select class="input-field" id="lineTmpl" onchange="updateLinePreview()">
+              <option value="alert">🚨 標準警示通報</option>
+              <option value="quick">⚡ 簡訊快報</option>
+              <option value="daily">📊 日報摘要</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">LINE 訊息預覽</div>
+            <div class="preview-box" id="linePreview"></div>
+          </div>
+          <div style="background:rgba(0,255,163,.05);border:1px solid rgba(0,255,163,.2);padding:.8rem;font-size:.8rem;color:var(--safe)">
+            ✅ LINE Bot 已連線 — SmokeSentry Bot (Channel: 2006****)
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTH panel -->
+      <div class="ntab-panel" id="panel-both">
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem">
+          <div style="background:rgba(0,180,255,.06);border:1px solid var(--border);padding:1rem;font-size:.85rem;line-height:1.8">
+            同步發送將同時透過 <strong style="color:var(--accent)">Email</strong> 和 <strong style="color:var(--safe)">LINE Bot</strong> 發送通報給所有管理者，確保第一時間收到警示。
+          </div>
+          <div class="form-group">
+            <div class="form-label">通報對象</div>
+            <div style="display:flex;flex-direction:column;gap:.4rem" id="bothTargets">
+              <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 王主任（wang@school.edu.tw）</label>
+              <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 李組長（li@school.edu.tw）</label>
+              <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" style="accent-color:var(--accent)"> 陳教官（chen@school.edu.tw）</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="form-label">緊急程度</div>
+            <select class="input-field">
+              <option>🔴 緊急（所有管道立即發送）</option>
+              <option selected>🟡 一般（Email + LINE）</option>
+              <option>🟢 低（僅 Email）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <div class="form-label">附加訊息</div>
+            <textarea class="input-field" id="bothNote" placeholder="補充說明…" style="min-height:60px"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-ghost" onclick="previewSend()">👁 預覽</button>
+      <button class="btn btn-accent" onclick="confirmSend()" id="sendBtn">📨 確認發送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD ADMIN MODAL -->
+<div class="modal-overlay" id="adminModal">
+  <div class="modal" style="width:420px">
+    <div class="modal-header">
+      <div class="modal-title">＋ 新增管理者</div>
+      <button class="modal-close" onclick="closeAdminModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><div class="form-label">姓名</div><input type="text" class="input-field" id="newName" placeholder="王小明"></div>
+      <div class="form-group"><div class="form-label">職稱</div><input type="text" class="input-field" id="newTitle" placeholder="學務主任"></div>
+      <div class="form-group"><div class="form-label">Email</div><input type="email" class="input-field" id="newEmail" placeholder="user@school.edu.tw"></div>
+      <div class="form-group"><div class="form-label">LINE User ID（選填）</div><input type="text" class="input-field" id="newLine" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
+      <div class="form-group">
+        <div class="form-label">通知類型</div>
+        <div style="display:flex;flex-direction:column;gap:.3rem">
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 即時警示</label>
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 每日摘要</label>
+          <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" style="accent-color:var(--accent)"> 每週報告</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAdminModal()">取消</button>
+      <button class="btn btn-accent" onclick="saveAdmin()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.toggle { position:relative;display:inline-block;width:38px;height:20px; }
+.toggle input { opacity:0;width:0;height:0; }
+.toggle-slider { position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,.1);border:1px solid var(--border);transition:.3s;border-radius:20px; }
+.toggle-slider::before { content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:var(--text-muted);transition:.3s;border-radius:50%; }
+input:checked + .toggle-slider { background:rgba(0,180,255,.25);border-color:var(--accent); }
+input:checked + .toggle-slider::before { transform:translateX(18px);background:var(--accent); }
+</style>
+
+<script src="shared.js"></script>
+<script>
+injectShell('警示管理');
+
+// ── Data ──
+let admins = [
+  { name:'王主任', title:'學務主任', email:'wang@school.edu.tw', line:'Ua1b2c3d4', tags:['即時','摘要'], active:true },
+  { name:'李組長', title:'生活輔導組長', email:'li@school.edu.tw', line:'Ue5f6g7h8', tags:['即時'], active:true },
+  { name:'陳教官', title:'軍訓教官', email:'chen@school.edu.tw', line:'', tags:['摘要'], active:false },
+];
+
+const ALERTS = [
+  { id:1, type:'danger', title:'吸菸行為確認 — CAM-01 廁所外走廊 B棟', time:'14:32:07', cam:'CAM-01', loc:'廁所外走廊 B棟', conf:94, status:'unread', desc:'YOLOv8 偵測到香菸物件（信心度 96%），MediaPipe 確認吸菸姿態，MQ-135 空氣品質指數急升至 847 AQI，三路融合判定確認吸菸行為。' },
+  { id:2, type:'warn', title:'點煙行為偵測 — CAM-02 樓梯間 A棟', time:'14:18:43', cam:'CAM-02', loc:'樓梯間 A棟', conf:88, status:'unread', desc:'偵測到點火動作與香菸物件，煙霧感測器數值上升中，判定為點煙行為，持續監控中。' },
+  { id:3, type:'danger', title:'重複違規 — CAM-01 廁所外走廊 B棟', time:'13:55:21', cam:'CAM-01', loc:'廁所外走廊 B棟', conf:91, status:'unread', desc:'同一地點今日第三次吸菸事件偵測，建議立即派員巡查並加強此區域監控頻率。' },
+  { id:4, type:'danger', title:'吸菸行為確認 — CAM-04 校門口', time:'13:22:09', cam:'CAM-04', loc:'校門口周邊', conf:96, status:'sent', desc:'校門口附近偵測到明確吸菸行為，信心度 96%，已通報教官室處理。' },
+  { id:5, type:'warn', title:'疑似違規 — CAM-03 宿舍公共空間', time:'12:15:57', cam:'CAM-03', loc:'宿舍公共空間', conf:62, status:'watching', desc:'手部動作與嘴部距離達閾值，但煙霧感測器無顯著變化，多模態融合判定為觀察狀態。' },
+];
+
+let currentFilter = 'all';
+let currentAlertId = null;
+
+function renderAlerts() {
+  const list = document.getElementById('alertList');
+  const filtered = ALERTS.filter(a => {
+    if (currentFilter === 'danger') return a.type === 'danger';
+    if (currentFilter === 'warn') return a.type === 'warn';
+    if (currentFilter === 'unread') return a.status === 'unread';
+    return true;
+  });
+  list.innerHTML = filtered.map(a => {
+    const colorMap = { danger: 'var(--danger)', warn: 'var(--warn)' };
+    const color = colorMap[a.type] || 'var(--accent)';
+    const statusBadge = a.status === 'sent'
+      ? '<span class="badge badge-safe">已通報</span>'
+      : a.status === 'watching'
+        ? '<span class="badge badge-blue">觀察中</span>'
+        : '<span class="badge badge-danger">未處理</span>';
+    return `<div class="alert-card ${a.status === 'unread' ? (a.type === 'danger' ? 'unread' : 'warn-card') : ''}" id="alert-${a.id}">
+      <div style="width:4px;background:${color};border-radius:2px;align-self:stretch;min-height:40px"></div>
+      <div>
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-meta">
+          <span>🕐 ${a.time}</span>
+          <span>📹 ${a.cam}</span>
+          <span>📍 ${a.loc}</span>
+          <span>🎯 信心度 ${a.conf}%</span>
+          ${statusBadge}
+        </div>
+        <div class="alert-desc">${a.desc}</div>
+      </div>
+      <div class="alert-actions">
+        <button class="act-btn ${a.status==='sent'?'sent':''}" onclick="openNotify(${a.id})">📨 通報</button>
+        <button class="act-btn" onclick="markHandled(${a.id})">✓ 已處理</button>
+        <button class="act-btn" onclick="viewDetail(${a.id})">🔍 詳情</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:.8rem">無符合條件的警示</div>';
+}
+
+function renderAdmins() {
+  document.getElementById('adminList').innerHTML = admins.map((a,i) => `
+    <div class="admin-row">
+      <div class="admin-info">
+        <div class="admin-name">${a.name} <span style="color:var(--text-muted);font-size:.78rem">${a.title}</span></div>
+        <div class="admin-email">${a.email}${a.line ? ' · LINE ✓' : ''}</div>
+        <div class="admin-tags" style="margin-top:.2rem">${a.tags.map(t=>`<span class="badge badge-blue">${t}</span>`).join('')}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <label class="toggle"><input type="checkbox" ${a.active?'checked':''} onchange="toggleAdmin(${i},this)" style="accent-color:var(--accent)"><span class="toggle-slider"></span></label>
+        <button class="act-btn" onclick="removeAdmin(${i})" style="font-size:.7rem;padding:.25rem .5rem">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function filterAlerts(btn, f) {
+  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFilter = f;
+  renderAlerts();
+}
+
+function markHandled(id) {
+  const a = ALERTS.find(x => x.id === id);
+  if (a) { a.status = 'sent'; renderAlerts(); showToast('已標記為已處理', 'success'); }
+}
+
+function viewDetail(id) {
+  const a = ALERTS.find(x => x.id === id);
+  if (a) showToast(`${a.title} — ${a.desc.slice(0,30)}…`, 'info', 5000);
+}
+
+// ── Modal ──
+function openNotify(id) {
+  currentAlertId = id;
+  const a = ALERTS.find(x => x.id === id);
+  document.getElementById('modalTitle').textContent = `📨 發送警示通報 — ${a?.cam || ''}`;
+  if (a) document.getElementById('mailSubject').value = `【SmokeSentry 警示】${a.type === 'danger' ? '🔴 緊急' : '🟡 注意'} — ${a.title}`;
+  updateEmailPreview();
+  updateLinePreview();
+  document.getElementById('notifyModal').classList.add('show');
+}
+
+function openNotifyAll() {
+  currentAlertId = null;
+  document.getElementById('modalTitle').textContent = '📢 全部通報 — 3 則未處理警示';
+  document.getElementById('mailSubject').value = '【SmokeSentry 每日警示摘要】今日發生 23 起事件';
+  updateEmailPreview();
+  updateLinePreview();
+  document.getElementById('notifyModal').classList.add('show');
+}
+
+function closeModal() { document.getElementById('notifyModal').classList.remove('show'); }
+
+function switchTab(btn, panel) {
+  document.querySelectorAll('.ntab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ntab-panel').forEach(p => p.classList.remove('show'));
+  btn.classList.add('active');
+  document.getElementById('panel-' + panel).classList.add('show');
+}
+
+function updateEmailPreview() {
+  const a = currentAlertId ? ALERTS.find(x => x.id === currentAlertId) : null;
+  const note = document.getElementById('mailNote')?.value || '';
+  const preview = `寄件人: SmokeSentry AI <smokesentry@school.edu.tw>
+時間: ${new Date().toLocaleString('zh-TW')}
+─────────────────────────────────────
+
+【SmokeSentry 校園吸菸智慧辨識系統 — 警示通報】
+
+${a ? `事件時間: ${a.time}
+偵測地點: ${a.loc}
+攝影機編號: ${a.cam}
+辨識信心度: ${a.conf}%
+事件描述: ${a.desc}` : '今日共發生 23 起警示事件，其中 3 起尚未處理。'}
+
+${note ? `補充說明:\n${note}\n` : ''}
+─────────────────────────────────────
+此訊息由 SmokeSentry AI 自動發送
+後台管理: https://smokesentry.school.edu.tw
+`;
+  const el = document.getElementById('emailPreview');
+  if (el) el.textContent = preview;
+}
+
+function updateLinePreview() {
+  const tmpl = document.getElementById('lineTmpl')?.value || 'alert';
+  const a = currentAlertId ? ALERTS.find(x => x.id === currentAlertId) : null;
+  const msgs = {
+    alert: `🚨 SmokeSentry 警示通報
+━━━━━━━━━━━━━━
+${a ? `📍 地點: ${a.loc}
+📹 攝影機: ${a.cam}
+🕐 時間: ${a.time}
+🎯 信心度: ${a.conf}%
+📋 類型: ${a.type === 'danger' ? '🔴 吸菸（確認）' : '🟡 點煙/疑似'}` : '📋 今日未處理警示: 3 件\n📍 主要地點: 廁所外走廊 B棟'}
+━━━━━━━━━━━━━━
+⚠️ 請儘速前往處理或確認`,
+    quick: `🚨 吸菸警示 | ${a ? a.loc : '校園內'} | ${a ? a.time : '14:32'} | 信心度${a ? a.conf : 94}%`,
+    daily: `📊 SmokeSentry 日報
+━━━━━━━━━━━━
+今日警示: 23 件
+已處理: 18 件
+未處理: 3 件
+最高頻地點: 廁所外走廊 B棟 (8次)
+━━━━━━━━━━━━
+📅 ${new Date().toLocaleDateString('zh-TW')}`
+  };
+  const el = document.getElementById('linePreview');
+  if (el) el.textContent = msgs[tmpl] || msgs.alert;
+}
+
+function previewSend() { showToast('預覽已產生，請確認內容後按「確認發送」', 'info'); }
+
+function confirmSend() {
+  const btn = document.getElementById('sendBtn');
+  btn.textContent = '發送中…';
+  btn.disabled = true;
+  setTimeout(() => {
+    closeModal();
+    btn.textContent = '📨 確認發送';
+    btn.disabled = false;
+    if (currentAlertId) {
+      const a = ALERTS.find(x => x.id === currentAlertId);
+      if (a) a.status = 'sent';
+      renderAlerts();
+    }
+    showToast('✅ 通報已成功發送至所有管理者（Email + LINE Bot）', 'success', 4000);
+  }, 1800);
+}
+
+// ── Admin modal ──
+function openAddAdmin() { document.getElementById('adminModal').classList.add('show'); }
+function closeAdminModal() { document.getElementById('adminModal').classList.remove('show'); }
+function toggleAdmin(i, el) { admins[i].active = el.checked; }
+function removeAdmin(i) {
+  if (!confirm(`確定移除 ${admins[i].name}？`)) return;
+  admins.splice(i, 1); renderAdmins(); showToast('已移除管理者', 'warn');
+}
+function saveAdmin() {
+  const name = document.getElementById('newName').value.trim();
+  const email = document.getElementById('newEmail').value.trim();
+  if (!name || !email) { showToast('請填寫姓名與 Email', 'error'); return; }
+  admins.push({ name, title: document.getElementById('newTitle').value, email, line: document.getElementById('newLine').value, tags:['即時'], active:true });
+  renderAdmins();
+  closeAdminModal();
+  showToast(`已新增管理者：${name}`, 'success');
+  ['newName','newTitle','newEmail','newLine'].forEach(id => document.getElementById(id).value='');
+}
+
+// ── Chip input ──
+function handleChipInput(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (val && val.includes('@')) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = `${val} <button class="chip-remove" onclick="removeChip(this)">×</button>`;
+      e.target.parentElement.insertBefore(chip, e.target);
+      e.target.value = '';
+    } else if (val) { showToast('請輸入有效的 Email 地址', 'error'); }
+  }
+}
+function removeChip(btn) { btn.parentElement.remove(); }
+
+// ── LINE Bot test ──
+function testLineBot() {
+  showToast('LINE Bot 測試訊息已發送 ✓', 'success');
+}
+
+// ── Notify all modal listener ──
+document.getElementById('mailNote').addEventListener('input', updateEmailPreview);
+
+// Init
+renderAlerts();
+renderAdmins();
+</script>
+</body>
+</html>

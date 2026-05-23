@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SmokeSentry AI — 即時攝影機</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.cam-layout { display:grid; grid-template-columns:1fr 280px; gap:1rem; height:calc(100vh - 100px); }
+.cam-main { display:flex; flex-direction:column; gap:.6rem; overflow:hidden; }
+.cam-grid-2x2 { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:4px; flex:1; background:var(--border); border:1px solid var(--border); }
+.cam-grid-1x1 { display:grid; grid-template-columns:1fr; flex:1; background:var(--border); border:1px solid var(--border); }
+.cam-grid-3x1 { display:grid; grid-template-columns:1fr 1fr 1fr; flex:1; background:var(--border); border:1px solid var(--border); }
+.cam-cell-big {
+  background:#050a0f; position:relative; overflow:hidden; cursor:pointer;
+  transition:outline .2s;
+}
+.cam-cell-big.focused { outline:2px solid var(--accent); z-index:2; }
+.cam-cell-big canvas { width:100%; height:100%; display:block; }
+.cam-overlay { position:absolute; inset:0; pointer-events:none; }
+.cam-hud-tl { position:absolute; top:8px; left:8px; font-family:var(--font-mono); font-size:.62rem; color:rgba(0,180,255,.75); line-height:1.7; }
+.cam-hud-tr { position:absolute; top:8px; right:8px; font-family:var(--font-mono); font-size:.62rem; color:rgba(0,180,255,.75); text-align:right; line-height:1.7; }
+.cam-hud-br { position:absolute; bottom:8px; right:8px; font-family:var(--font-mono); font-size:.62rem; text-align:right; }
+.cam-hud-bl { position:absolute; bottom:8px; left:8px; font-family:var(--font-mono); font-size:.62rem; color:rgba(0,180,255,.6); }
+.cam-name-tag { position:absolute; top:8px; left:50%; transform:translateX(-50%); background:rgba(8,12,16,.8); font-family:var(--font-mono); font-size:.65rem; padding:2px 10px; color:var(--text-muted); backdrop-filter:blur(6px); white-space:nowrap; }
+.alert-tag { position:absolute; bottom:8px; left:8px; font-family:var(--font-mono); font-size:.65rem; padding:3px 10px; animation:blink 1s step-end infinite; }
+.at-danger { background:rgba(255,58,92,.2); border:1px solid var(--danger); color:var(--danger); }
+.at-warn   { background:rgba(255,184,0,.15); border:1px solid var(--warn); color:var(--warn); }
+.at-ok     { background:rgba(0,255,163,.1); border:1px solid var(--safe); color:var(--safe); animation:none; }
+
+/* Layout switcher */
+.layout-bar { display:flex; gap:.4rem; }
+.layout-btn { padding:.3rem .7rem; font-family:var(--font-mono); font-size:.68rem; border:1px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; transition:all .2s; }
+.layout-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(0,180,255,.08); }
+.layout-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+/* Side panel */
+.cam-side { display:flex; flex-direction:column; gap:.7rem; overflow-y:auto; }
+.cam-side::-webkit-scrollbar { width:3px; }
+.cam-side::-webkit-scrollbar-thumb { background:var(--border); }
+
+/* Mini cam list */
+.mini-cam { background:var(--surface); border:1px solid var(--border); cursor:pointer; transition:border-color .2s; }
+.mini-cam:hover { border-color:rgba(0,180,255,.3); }
+.mini-cam.selected { border-color:var(--accent); }
+.mini-header { display:flex; align-items:center; justify-content:space-between; padding:.4rem .7rem; background:var(--surface2); border-bottom:1px solid var(--border); font-family:var(--font-mono); font-size:.62rem; }
+.mini-view { position:relative; aspect-ratio:16/9; background:#050a0f; overflow:hidden; }
+.mini-view canvas { width:100%; height:100%; display:block; }
+
+/* Sensor strip */
+.sensor-strip { background:var(--surface); border:1px solid var(--border); padding:.8rem; display:flex; flex-direction:column; gap:.5rem; }
+.ss-row { display:flex; align-items:center; justify-content:space-between; font-size:.78rem; }
+.ss-key { font-family:var(--font-mono); font-size:.65rem; color:var(--text-muted); }
+.ss-val { font-family:var(--font-mono); font-size:.82rem; font-weight:600; }
+.ss-bar { height:3px; background:rgba(255,255,255,.05); border-radius:2px; margin-top:.2rem; overflow:hidden; }
+.ss-fill { height:100%; border-radius:2px; transition:width 1s ease; }
+
+/* Event feed */
+.event-feed { background:var(--surface); border:1px solid var(--border); flex:1; overflow:hidden; display:flex; flex-direction:column; }
+.feed-body { flex:1; overflow-y:auto; padding:.5rem; display:flex; flex-direction:column; gap:.3rem; }
+.feed-body::-webkit-scrollbar { width:3px; }
+.feed-body::-webkit-scrollbar-thumb { background:var(--border); }
+.feed-entry { padding:.4rem .6rem; font-size:.75rem; border-left:2px solid var(--border); background:rgba(255,255,255,.02); animation:slideIn .3s ease; }
+.fe-time { font-family:var(--font-mono); font-size:.65rem; color:var(--text-muted); }
+.fe-msg { margin-top:.1rem; line-height:1.4; }
+.fe-danger { border-left-color:var(--danger); }
+.fe-warn { border-left-color:var(--warn); }
+.fe-ok { border-left-color:var(--safe); }
+</style>
+</head>
+<body>
+<div id="sidebar-slot"></div>
+<div class="main" style="overflow:hidden">
+  <div id="topbar-slot"></div>
+  <div class="content" style="padding:1rem 1.5rem;overflow:hidden;display:flex;flex-direction:column;height:calc(100vh - 57px)">
+
+    <!-- Toolbar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-shrink:0">
+      <div class="layout-bar">
+        <button class="layout-btn" onclick="setLayout('1x1',this)">◻ 單視窗</button>
+        <button class="layout-btn active" onclick="setLayout('2x2',this)">⊞ 2×2</button>
+        <button class="layout-btn" onclick="setLayout('3x1',this)">⊟ 1×3</button>
+      </div>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <span style="font-family:var(--font-mono);font-size:.68rem;color:var(--safe)">● 4 cameras online</span>
+        <button class="btn btn-ghost" onclick="toggleRecording(this)" style="font-size:.72rem">⏺ 錄影</button>
+        <a href="alerts.html" class="btn btn-danger" style="font-size:.72rem;text-decoration:none">🚨 3 警示</a>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="cam-layout" style="flex:1;overflow:hidden">
+      <!-- Camera grid -->
+      <div class="cam-main">
+        <div id="camGridContainer" class="cam-grid-2x2">
+          <div class="cam-cell-big" id="cell0" onclick="focusCam(0)">
+            <canvas id="cv0"></canvas>
+            <div class="cam-overlay">
+              <div class="cam-hud-tl" id="hud0tl">FPS: 30<br>YOLOv8n</div>
+              <div class="cam-hud-tr" id="hud0tr">CAM-01<br>B棟廁所</div>
+              <div class="cam-name-tag">CAM-01 — 廁所外走廊 B棟</div>
+              <div class="alert-tag at-danger">● 吸菸偵測中</div>
+            </div>
+          </div>
+          <div class="cam-cell-big" id="cell1" onclick="focusCam(1)">
+            <canvas id="cv1"></canvas>
+            <div class="cam-overlay">
+              <div class="cam-hud-tr" id="hud1tr">CAM-02<br>A棟樓梯</div>
+              <div class="cam-name-tag">CAM-02 — 樓梯間 A棟</div>
+              <div class="alert-tag at-warn">● 點煙偵測</div>
+            </div>
+          </div>
+          <div class="cam-cell-big" id="cell2" onclick="focusCam(2)">
+            <canvas id="cv2"></canvas>
+            <div class="cam-overlay">
+              <div class="cam-hud-tr" id="hud2tr">CAM-03<br>宿舍</div>
+              <div class="cam-name-tag">CAM-03 — 宿舍公共空間</div>
+              <div class="alert-tag at-ok">● 正常</div>
+            </div>
+          </div>
+          <div class="cam-cell-big" id="cell3" onclick="focusCam(3)">
+            <canvas id="cv3"></canvas>
+            <div class="cam-overlay">
+              <div class="cam-hud-tr" id="hud3tr">CAM-04<br>校門口</div>
+              <div class="cam-name-tag">CAM-04 — 校門口周邊</div>
+              <div class="alert-tag at-ok">● 正常</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side panel -->
+      <div class="cam-side">
+
+        <!-- Sensor readings -->
+        <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);letter-spacing:.1em">// 感測器即時數值</div>
+
+        <div class="sensor-strip">
+          <div class="ss-row">
+            <div>
+              <div class="ss-key">CAM-01 MQ-135</div>
+              <div class="ss-val" id="sv0" style="color:var(--danger)">847 AQI</div>
+              <div class="ss-bar"><div class="ss-fill" id="sb0" style="width:85%;background:var(--danger)"></div></div>
+            </div>
+            <span class="badge badge-danger">危險</span>
+          </div>
+          <div class="ss-row">
+            <div>
+              <div class="ss-key">CAM-02 MQ-135</div>
+              <div class="ss-val" id="sv1" style="color:var(--warn)">312 AQI</div>
+              <div class="ss-bar"><div class="ss-fill" id="sb1" style="width:31%;background:var(--warn)"></div></div>
+            </div>
+            <span class="badge badge-warn">注意</span>
+          </div>
+          <div class="ss-row">
+            <div>
+              <div class="ss-key">CAM-03 MQ-135</div>
+              <div class="ss-val" id="sv2" style="color:var(--safe)">98 AQI</div>
+              <div class="ss-bar"><div class="ss-fill" id="sb2" style="width:10%;background:var(--safe)"></div></div>
+            </div>
+            <span class="badge badge-safe">正常</span>
+          </div>
+          <div class="ss-row">
+            <div>
+              <div class="ss-key">CAM-04 MQ-135</div>
+              <div class="ss-val" id="sv3" style="color:var(--safe)">115 AQI</div>
+              <div class="ss-bar"><div class="ss-fill" id="sb3" style="width:12%;background:var(--safe)"></div></div>
+            </div>
+            <span class="badge badge-safe">正常</span>
+          </div>
+        </div>
+
+        <!-- AI confidence -->
+        <div class="sensor-strip">
+          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);margin-bottom:.4rem">// AI 信心度</div>
+          <div style="display:flex;flex-direction:column;gap:.35rem">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);margin-bottom:.15rem">
+                <span>CAM-01 綜合</span><span id="cf0" style="color:var(--danger)">94%</span>
+              </div>
+              <div class="ss-bar"><div class="ss-fill" id="cfb0" style="width:94%;background:var(--danger)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);margin-bottom:.15rem">
+                <span>CAM-02 綜合</span><span id="cf1" style="color:var(--warn)">81%</span>
+              </div>
+              <div class="ss-bar"><div class="ss-fill" id="cfb1" style="width:81%;background:var(--warn)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);margin-bottom:.15rem">
+                <span>CAM-03 綜合</span><span id="cf2" style="color:var(--safe)">—</span>
+              </div>
+              <div class="ss-bar"><div class="ss-fill" id="cfb2" style="width:0%;background:var(--safe)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-muted);margin-bottom:.15rem">
+                <span>CAM-04 綜合</span><span id="cf3" style="color:var(--safe)">—</span>
+              </div>
+              <div class="ss-bar"><div class="ss-fill" id="cfb3" style="width:0%;background:var(--safe)"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live event feed -->
+        <div class="event-feed" style="min-height:200px">
+          <div class="card-header" style="flex-shrink:0">
+            <div class="card-title">📋 即時事件串流</div>
+            <span style="font-family:var(--font-mono);font-size:.6rem;color:var(--safe)">● LIVE</span>
+          </div>
+          <div class="feed-body" id="feedBody">
+            <div class="feed-entry fe-danger">
+              <div class="fe-time">14:32:07</div>
+              <div class="fe-msg">🚨 CAM-01 吸菸行為確認 94%</div>
+            </div>
+            <div class="feed-entry fe-warn">
+              <div class="fe-time">14:18:43</div>
+              <div class="fe-msg">⚠ CAM-02 點煙偵測 81%</div>
+            </div>
+            <div class="feed-entry fe-ok">
+              <div class="fe-time">14:05:12</div>
+              <div class="fe-msg">✓ CAM-03 無異常</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+injectShell('即時攝影機');
+
+// ── Camera configs ──
+const CAM_CFGS = [
+  { state:'smoking', col:[255,58,92],  label:'CAM-01', loc:'廁所外走廊 B棟', aqi:847, aqiBase:847 },
+  { state:'lighting',col:[255,184,0],  label:'CAM-02', loc:'樓梯間 A棟',     aqi:312, aqiBase:312 },
+  { state:'normal',  col:[0,255,163],  label:'CAM-03', loc:'宿舍公共空間',   aqi:98,  aqiBase:98  },
+  { state:'normal',  col:[0,180,255],  label:'CAM-04', loc:'校門口周邊',     aqi:115, aqiBase:115 },
+];
+
+let frames = [0,0,0,0];
+let particles = [[],[],[],[]];
+let focusedCam = null;
+let recording = false;
+let layoutMode = '2x2';
+
+// ── Draw one camera frame ──
+function drawCam(idx) {
+  const cv = document.getElementById('cv'+idx);
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const cfg = CAM_CFGS[idx];
+  const W = cv.offsetWidth || 320;
+  const H = cv.offsetHeight || 200;
+  cv.width = W; cv.height = H;
+
+  const f = frames[idx];
+  const pts = particles[idx];
+  const col = cfg.col.join(',');
+
+  // BG + grid
+  ctx.fillStyle = '#050a0f'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = 'rgba(0,180,255,.04)'; ctx.lineWidth = .7;
+  for(let x=0;x<W;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Floor line
+  ctx.strokeStyle = 'rgba(0,180,255,.07)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,H*.7); ctx.lineTo(W,H*.7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W*.2,H*.7); ctx.lineTo(W*.5,H*.35); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W*.8,H*.7); ctx.lineTo(W*.5,H*.35); ctx.stroke();
+
+  // Person
+  const px = W*.4, py = H*.1;
+  const bw = W*.09, bh = H*.58;
+  ctx.fillStyle = 'rgba(255,210,170,.72)';
+  ctx.beginPath(); ctx.arc(px+bw/2, py+bw*.45, bw*.45, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(55,75,125,.8)';
+  ctx.fillRect(px, py+bw*.9+2, bw, bh*.52);
+  ctx.fillStyle = 'rgba(35,45,75,.8)';
+  ctx.fillRect(px, py+bw*.9+bh*.52+2, bw*.44, bh*.38);
+  ctx.fillRect(px+bw*.56, py+bw*.9+bh*.52+2, bw*.44, bh*.38);
+
+  // Arm
+  const smoking = cfg.state==='smoking'||cfg.state==='lighting';
+  const armAngle = smoking ? -0.92+Math.sin(f*.05)*.12 : -0.2+Math.sin(f*.03)*.08;
+  const armLen = W*.08;
+  const ax = px+bw, ay = py+bw*.9+bh*.12;
+  const ex = ax+Math.cos(armAngle)*armLen, ey = ay+Math.sin(armAngle)*armLen;
+  ctx.strokeStyle='rgba(55,75,125,.85)'; ctx.lineWidth=bw*.32; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(ex,ey); ctx.stroke();
+
+  if (smoking) {
+    // Cigarette
+    ctx.strokeStyle='#f2ede2'; ctx.lineWidth=1.8; ctx.lineCap='butt';
+    ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+W*.035,ey-H*.025); ctx.stroke();
+    // Ember glow
+    const ea=.45+Math.sin(f*.18)*.45;
+    ctx.fillStyle=`rgba(255,${cfg.state==='lighting'?170:70},15,${ea})`;
+    ctx.beginPath(); ctx.arc(ex+W*.035,ey-H*.025,2.5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,${cfg.state==='lighting'?200:100},30,.2)`;
+    ctx.beginPath(); ctx.arc(ex+W*.035,ey-H*.025,6,0,Math.PI*2); ctx.fill();
+    // Emit smoke
+    if(f%3===0) pts.push({x:ex+W*.035,y:ey-H*.025,vx:(Math.random()-.5)*.4,vy:-.7-Math.random()*.5,life:1,size:2.5+Math.random()*3});
+  }
+
+  // Smoke particles
+  particles[idx] = pts.filter(p=>p.life>0);
+  pts.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.life-=.012; p.size*=1.018;
+    ctx.globalAlpha=p.life*.22;
+    ctx.fillStyle='rgba(190,210,230,.6)';
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  });
+
+  // Detection bounding box
+  if (cfg.state!=='normal') {
+    const bx=px-5, by=py-5, boxW=bw+10, boxH=bh+12;
+    const alpha=.65+Math.sin(f*.09)*.3;
+    ctx.strokeStyle=`rgba(${col},${alpha})`; ctx.lineWidth=1.5;
+    ctx.strokeRect(bx,by,boxW,boxH);
+    // Label
+    const lbl=cfg.state==='smoking'?`SMOKING ${CAM_CFGS[idx].conf||94}%`:`LIGHTING ${CAM_CFGS[idx].conf||81}%`;
+    ctx.fillStyle=`rgba(${col},.9)`;
+    ctx.fillRect(bx, by-20, ctx.measureText(lbl).width*1.2+14, 20);
+    ctx.fillStyle=cfg.state==='smoking'?'white':'black';
+    ctx.font=`bold ${Math.max(10,W*.022)}px JetBrains Mono,monospace`;
+    ctx.fillText(lbl, bx+5, by-6);
+    // Corner accents
+    const cs=10;
+    [[bx,by,1,1],[bx+boxW,by,-1,1],[bx,by+boxH,1,-1],[bx+boxW,by+boxH,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.strokeStyle=`rgba(${col},${alpha})`; ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx*cs,y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+dy*cs);ctx.stroke();
+    });
+  }
+
+  // Scan line
+  const sy=(f*1.8)%H;
+  const sg=ctx.createLinearGradient(0,sy-8,0,sy+8);
+  sg.addColorStop(0,'transparent');sg.addColorStop(.5,`rgba(${col},.18)`);sg.addColorStop(1,'transparent');
+  ctx.fillStyle=sg; ctx.fillRect(0,sy-8,W,16);
+
+  // Timestamp HUD
+  const now=new Date();
+  const ts=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  ctx.fillStyle='rgba(0,180,255,.6)';
+  ctx.font=`${Math.max(9,W*.022)}px JetBrains Mono,monospace`;
+  ctx.fillText(`${ts}  FPS:30`, 8, 18);
+
+  if (recording) {
+    ctx.fillStyle=`rgba(255,58,92,${.5+Math.sin(f*.1)*.5})`;
+    ctx.beginPath(); ctx.arc(W-14,14,5,0,Math.PI*2); ctx.fill();
+  }
+
+  if(cfg.state==='smoking') {
+    const alertAlpha=.5+Math.sin(f*.12)*.5;
+    ctx.fillStyle=`rgba(255,58,92,${alertAlpha})`;
+    ctx.font=`bold ${Math.max(10,W*.024)}px JetBrains Mono,monospace`;
+    const atxt='⚠ SMOKING DETECTED';
+    ctx.fillText(atxt, W-ctx.measureText(atxt).width-8, H-10);
+  }
+
+  frames[idx]++;
+  requestAnimationFrame(()=>drawCam(idx));
+}
+
+// Start all cameras
+function startAllCams() {
+  [0,1,2,3].forEach(i=>drawCam(i));
+}
+
+// ── Layout switching ──
+function setLayout(mode, btn) {
+  layoutMode = mode;
+  document.querySelectorAll('.layout-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const container = document.getElementById('camGridContainer');
+  container.className = mode==='2x2'?'cam-grid-2x2':mode==='1x1'?'cam-grid-1x1':'cam-grid-3x1';
+  const cells = [0,1,2,3];
+  if (mode==='1x1') {
+    // Show only focused cam or cam 0
+    cells.forEach(i=>{ const c=document.getElementById('cell'+i); if(c) c.style.display=i===0?'':'none'; });
+  } else if (mode==='3x1') {
+    cells.forEach(i=>{ const c=document.getElementById('cell'+i); if(c) c.style.display=i===3?'none':''; });
+  } else {
+    cells.forEach(i=>{ const c=document.getElementById('cell'+i); if(c) c.style.display=''; });
+  }
+}
+
+function focusCam(idx) {
+  if (layoutMode==='2x2') {
+    document.querySelectorAll('.cam-cell-big').forEach((c,i)=>c.classList.toggle('focused',i===idx));
+    focusedCam = idx;
+  } else {
+    // Switch to 1x1 showing this cam
+    [0,1,2,3].forEach(i=>{ const c=document.getElementById('cell'+i); if(c) c.style.display=i===idx?'':'none'; });
+    const container=document.getElementById('camGridContainer');
+    container.className='cam-grid-1x1';
+    document.querySelectorAll('.layout-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelector('.layout-btn').classList.add('active');
+    layoutMode='1x1'; focusedCam=idx;
+  }
+}
+
+// ── Recording ──
+function toggleRecording(btn) {
+  recording=!recording;
+  btn.textContent=recording?'⏹ 停止錄影':'⏺ 錄影';
+  btn.style.color=recording?'var(--danger)':'';
+  btn.style.borderColor=recording?'var(--danger)':'';
+  showToast(recording?'開始錄影 — 所有攝影機':'錄影已停止，影像已儲存', recording?'warn':'success');
+}
+
+// ── Sensor simulation ──
+const AQI_BASES=[847,312,98,115];
+const AQI_COLS=['var(--danger)','var(--warn)','var(--safe)','var(--safe)'];
+setInterval(()=>{
+  AQI_BASES.forEach((base,i)=>{
+    const v=Math.round(base+(Math.random()-.5)*40);
+    const el=document.getElementById('sv'+i); const bar=document.getElementById('sb'+i);
+    if(el){el.textContent=v+' AQI'; el.style.color=AQI_COLS[i];}
+    if(bar) bar.style.width=Math.min(v/1000*100,100)+'%';
+  });
+  // Confidence jitter
+  [[0,94,'danger'],[1,81,'warn']].forEach(([i,base,c])=>{
+    const v=Math.round(base+(Math.random()-.5)*3);
+    const el=document.getElementById('cf'+i); const bar=document.getElementById('cfb'+i);
+    CAM_CFGS[i].conf=v;
+    if(el){el.textContent=v+'%'; el.style.color=`var(--${c})`;}
+    if(bar) bar.style.width=v+'%';
+  });
+}, 2200);
+
+// ── Live event feed ──
+const FEED_MSGS=[
+  {cls:'fe-danger',msg:'🚨 CAM-01 吸菸確認 94%'},
+  {cls:'fe-warn',  msg:'⚠ CAM-02 點煙偵測 81%'},
+  {cls:'fe-ok',    msg:'✓ CAM-03 場景正常'},
+  {cls:'fe-ok',    msg:'✓ CAM-04 場景正常'},
+  {cls:'fe-danger',msg:'🚨 CAM-01 持續吸菸行為'},
+  {cls:'fe-warn',  msg:'⚠ MQ-135 CAM-01 AQI 上升'},
+];
+let feedIdx=0;
+setInterval(()=>{
+  const fb=document.getElementById('feedBody'); if(!fb) return;
+  const now=new Date();
+  const t=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const m=FEED_MSGS[feedIdx%FEED_MSGS.length];
+  const entry=document.createElement('div');
+  entry.className=`feed-entry ${m.cls}`;
+  entry.innerHTML=`<div class="fe-time">${t}</div><div class="fe-msg">${m.msg}</div>`;
+  fb.insertBefore(entry,fb.firstChild);
+  if(fb.children.length>30) fb.removeChild(fb.lastChild);
+  feedIdx++;
+},4500);
+
+startAllCams();
+</script>
+</body>
+</html>
