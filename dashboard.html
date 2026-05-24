@@ -65,7 +65,16 @@
           <a href="cameras.html" style="font-family:var(--font-mono);font-size:.65rem;color:var(--accent);text-decoration:none">展開全螢幕 →</a>
         </div>
         <div class="cam-grid" id="camGrid">
-          <div class="cam-cell"><canvas id="c1" height="110"></canvas><div class="cam-label">CAM-01 廁所外走廊</div><div class="cam-status cs-alert">● ALERT</div></div>
+          <!-- CAM-01：優先顯示真實串流，fallback 到 Canvas -->
+          <div class="cam-cell" style="position:relative;">
+            <img id="cam01-stream"
+                 src="http://localhost:5000/video_feed"
+                 style="width:100%;display:block;height:110px;object-fit:cover;background:#050a0f;"
+                 onerror="this.style.display='none';document.getElementById('cam01-canvas').style.display='block';">
+            <canvas id="cam01-canvas" height="110" style="display:none;width:100%;"></canvas>
+            <div class="cam-label">CAM-01 廁所外走廊 B棟 <span style="color:var(--accent);font-size:.58rem" id="cam01badge">● LIVE</span></div>
+            <div class="cam-status cs-alert">● ALERT</div>
+          </div>
           <div class="cam-cell"><canvas id="c2" height="110"></canvas><div class="cam-label">CAM-02 樓梯間</div><div class="cam-status cs-live">● LIVE</div></div>
           <div class="cam-cell"><canvas id="c3" height="110"></canvas><div class="cam-label">CAM-03 宿舍公共</div><div class="cam-status cs-ok">● OK</div></div>
           <div class="cam-cell"><canvas id="c4" height="110"></canvas><div class="cam-label">CAM-04 校門口</div><div class="cam-status cs-live">● LIVE</div></div>
@@ -118,7 +127,7 @@
 injectShell('總覽儀表板');
 
 // Mini cams
-[{id:'c1',state:'smoking',col:'255,58,92'},{id:'c2',state:'lighting',col:'255,184,0'},{id:'c3',state:'normal',col:'0,255,163'},{id:'c4',state:'normal',col:'0,180,255'}]
+[{id:'cam01-canvas',state:'smoking',col:'255,58,92'},{id:'c2',state:'lighting',col:'255,184,0'},{id:'c3',state:'normal',col:'0,255,163'},{id:'c4',state:'normal',col:'0,180,255'}]
 .forEach(cfg=>{
   const cv=document.getElementById(cfg.id),ctx=cv.getContext('2d');let f=Math.random()*100,pts=[];
   function draw(){

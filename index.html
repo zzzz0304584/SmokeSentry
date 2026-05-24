@@ -1132,7 +1132,15 @@
 <section id="demo">
   <div class="section-tag">// INTERACTIVE DEMO</div>
   <h2 class="section-title">即時辨識模擬</h2>
-  <p class="section-desc">點擊下方按鈕觸發不同情境，觀察系統如何進行多模態融合判斷。</p>
+  <p class="section-desc">點擊下方按鈕觸發不同情境，觀察系統如何進行多模態融合判斷。<br>若已執行 <code style="font-family:var(--font-mono);color:var(--accent)">python server.py</code>，「😐 正常行走」按鈕將自動啟動真實鏡頭串流（MediaPipe + OpenCV）。</p>
+
+  <!-- Server status indicator -->
+  <div style="display:inline-flex;align-items:center;gap:.6rem;margin:1rem 0 1.5rem;background:var(--surface);border:1px solid var(--border);padding:.5rem 1.1rem;font-family:var(--font-mono);font-size:.72rem;">
+    <span id="serverStatusDot" style="width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex-shrink:0;animation:pulse 2s infinite;transition:background .4s"></span>
+    <span id="serverStatusTxt" style="color:var(--text-muted)">檢測 server.py 狀態中…</span>
+    <span style="color:var(--border);padding:0 .5rem">|</span>
+    <span style="color:var(--text-muted)">執行：<code style="color:var(--accent)">python server.py</code> 啟用真實鏡頭</span>
+  </div>
 
   <div class="demo-layout">
     <div>
@@ -1146,9 +1154,14 @@
           </div>
           <span id="camLocation" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted)">廁所外走廊 B棟</span>
         </div>
-        <div class="demo-view">
-          <canvas id="demoCanvas"></canvas>
-          <div class="demo-overlay">
+        <div class="demo-view" style="position:relative;">
+          <!-- 真實攝影機串流（需執行 server.py）-->
+          <img id="liveStream" src=""
+               style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;z-index:1;background:#050a0f;"
+               onerror="handleStreamError()">
+          <!-- Canvas 動畫 fallback -->
+          <canvas id="demoCanvas" style="position:relative;z-index:2;"></canvas>
+          <div class="demo-overlay" style="z-index:3;">
             <div class="alert-popup" id="alertPopup">⚠ 吸菸行為已偵測！廣播警示中...</div>
           </div>
         </div>
@@ -1177,10 +1190,10 @@
         </div>
         <div style="padding:0.8rem 1.2rem;background:var(--surface2);border-top:1px solid var(--border)">
           <div class="demo-controls">
-            <button class="ctrl-btn" onclick="triggerScenario('normal')">😐 正常行走</button>
-            <button class="ctrl-btn" onclick="triggerScenario('eating')">🍔 吃東西（誤判測試）</button>
-            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('smoking')">🚬 觸發吸煙場景</button>
-            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('lighting')">🔥 點煙偵測</button>
+            <button class="ctrl-btn" id="btn-normal" onclick="triggerScenario('normal'); launchDemo()">😐 正常行走</button>
+            <button class="ctrl-btn" onclick="triggerScenario('eating'); setDemoMode('eating')">🍔 吃東西（誤判測試）</button>
+            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('smoking'); setDemoMode('smoking')">🚬 觸發吸煙場景</button>
+            <button class="ctrl-btn trigger-smoke" onclick="triggerScenario('lighting'); setDemoMode('lighting')">🔥 點煙偵測</button>
           </div>
         </div>
       </div>
@@ -1668,6 +1681,102 @@ const observer = new IntersectionObserver(entries => {
   entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
 }, { threshold: 0.15 });
 document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+// =====================================================
+// 真實攝影機串流整合（需執行 python server.py）
+// =====================================================
+const SERVER_URL = 'http://localhost:5000';
+let streamActive = false;
+
+async function launchDemo() {
+  const btn = document.getElementById('btn-normal');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 啟動中...'; }
+  try {
+    const res = await fetch(`${SERVER_URL}/api/launch-demo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.success) {
+      const liveImg = document.getElementById('liveStream');
+      const canvas  = document.getElementById('demoCanvas');
+      liveImg.src = `${SERVER_URL}/video_feed?t=${Date.now()}`;
+      liveImg.style.display = 'block';
+      canvas.style.display  = 'none';
+      streamActive = true;
+      await setDemoMode('normal');
+      addLog('🎥 真實攝影機串流已啟動 (MediaPipe + OpenCV)', 'safe');
+      if (btn) { btn.textContent = '✅ 攝影機啟動中'; }
+      setTimeout(() => { if (btn) { btn.textContent = orig; btn.disabled = false; } }, 3000);
+    } else {
+      addLog('❌ 啟動失敗：' + (data.message || '未知錯誤'), 'danger');
+      if (btn) { btn.textContent = orig; btn.disabled = false; }
+    }
+  } catch (err) {
+    // Server not running — fall back to canvas animation gracefully
+    addLog('⚠ server.py 未執行，使用動畫模擬模式（執行 python server.py 可啟用真實鏡頭）', 'warn');
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+  }
+}
+
+async function setDemoMode(mode) {
+  if (!streamActive) {
+    // No live stream — just show canvas animation
+    const liveImg = document.getElementById('liveStream');
+    const canvas  = document.getElementById('demoCanvas');
+    if (liveImg) liveImg.style.display = 'none';
+    if (canvas)  canvas.style.display  = 'block';
+  }
+  try {
+    await fetch(`${SERVER_URL}/api/set-state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode })
+    });
+    if (streamActive) {
+      const labels = { normal:'🔵 Auto 模式', eating:'🍔 Eating 模式', smoking:'🚬 Smoke 模擬', lighting:'🔥 Ignition 模擬' };
+      addLog(labels[mode] || mode, (mode==='smoking'||mode==='lighting')?'danger':'');
+    }
+  } catch(e) { /* server offline — silent */ }
+}
+
+function handleStreamError() {
+  // Stream died or server went offline
+  streamActive = false;
+  const liveImg = document.getElementById('liveStream');
+  const canvas  = document.getElementById('demoCanvas');
+  if (liveImg) liveImg.style.display = 'none';
+  if (canvas)  canvas.style.display  = 'block';
+  addLog('⚠ 串流中斷，已切換回動畫模式', 'warn');
+}
+
+// ── 定期確認 server 狀態 ──
+async function pollServerStatus() {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/status`);
+    const data = await res.json();
+    const dot = document.getElementById('serverStatusDot');
+    const txt = document.getElementById('serverStatusTxt');
+    if (dot && txt) {
+      if (data.running) {
+        dot.style.background = 'var(--safe)';
+        txt.textContent = 'server.py 運行中 (MediaPipe)';
+        txt.style.color = 'var(--safe)';
+      } else {
+        dot.style.background = 'var(--warn)';
+        txt.textContent = 'server.py 已連線（攝影機未啟動）';
+        txt.style.color = 'var(--warn)';
+      }
+    }
+  } catch {
+    const dot = document.getElementById('serverStatusDot');
+    const txt = document.getElementById('serverStatusTxt');
+    if (dot) dot.style.background = 'var(--text-muted)';
+    if (txt) { txt.textContent = '離線模式（動畫模擬）'; txt.style.color = 'var(--text-muted)'; }
+  }
+}
+setInterval(pollServerStatus, 4000);
+pollServerStatus();
 </script>
 </body>
 </html>

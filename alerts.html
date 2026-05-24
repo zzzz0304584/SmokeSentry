@@ -549,21 +549,110 @@ ${a ? `📍 地點: ${a.loc}
 
 function previewSend() { showToast('預覽已產生，請確認內容後按「確認發送」', 'info'); }
 
-function confirmSend() {
+// ── 取得目前啟用的 Tab ──
+function getActiveTab() {
+  const active = document.querySelector('.ntab.active');
+  if (!active) return 'both';
+  const txt = active.textContent;
+  if (txt.includes('Email')) return 'email';
+  if (txt.includes('LINE'))  return 'line';
+  return 'both';
+}
+
+// ── 從 UI 收集收件人 chips ──
+function getRecipients() {
+  const chips = document.querySelectorAll('#recipientArea .chip');
+  return Array.from(chips).map(c => {
+    const m = c.textContent.match(/<(.+?)>/);
+    return m ? m[1] : c.textContent.replace('×','').trim();
+  }).filter(Boolean);
+}
+
+// ── 從 UI 收集 LINE 勾選目標 ──
+function getLineTargets() {
+  const active = admins.filter(a => a.active && a.line);
+  // 若無設定 line id 則用管理員 email 做記錄
+  return active.length ? active.map(a => a.line) : ['GROUP_DEFAULT'];
+}
+
+async function confirmSend() {
   const btn = document.getElementById('sendBtn');
-  btn.textContent = '發送中…';
+  const tab = getActiveTab();
+  const a = currentAlertId ? ALERTS.find(x => x.id === currentAlertId) : null;
+
+  const subject = document.getElementById('mailSubject')?.value || '【SmokeSentry 警示】吸菸事件通報';
+  const note    = document.getElementById('mailNote')?.value || '';
+  const urgency = document.getElementById('urgency')?.value || 'med';
+
+  const emailBody = document.getElementById('emailPreview')?.textContent || subject;
+  const lineMsg   = document.getElementById('linePreview')?.textContent  || subject;
+
+  const recipients = getRecipients();
+  if (tab !== 'line' && recipients.length === 0) {
+    showToast('請至少新增一位 Email 收件人', 'error'); return;
+  }
+
+  btn.textContent = '🔄 發送中…';
   btn.disabled = true;
-  setTimeout(() => {
-    closeModal();
-    btn.textContent = '📨 確認發送';
-    btn.disabled = false;
-    if (currentAlertId) {
-      const a = ALERTS.find(x => x.id === currentAlertId);
-      if (a) a.status = 'sent';
-      renderAlerts();
+
+  const SERVER = 'http://localhost:5000';
+
+  async function callApi(endpoint, payload) {
+    try {
+      const res = await fetch(`${SERVER}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    } catch {
+      // server.py 未執行 → 模擬成功
+      return { success: true, message: '[模擬模式] 通報已記錄（server.py 未執行）', simulated: true };
     }
-    showToast('✅ 通報已成功發送至所有管理者（Email + LINE Bot）', 'success', 4000);
-  }, 1800);
+  }
+
+  let emailResult = null, lineResult = null;
+
+  if (tab === 'email' || tab === 'both') {
+    emailResult = await callApi('/api/send-email', {
+      recipients, subject, body: emailBody, urgency
+    });
+  }
+
+  if (tab === 'line' || tab === 'both') {
+    lineResult = await callApi('/api/send-line', {
+      message: lineMsg,
+      targets: getLineTargets()
+    });
+  }
+
+  btn.textContent = '📨 確認發送';
+  btn.disabled = false;
+  closeModal();
+
+  // 標記已通報
+  if (a) { a.status = 'sent'; renderAlerts(); }
+
+  // 顯示結果 toast
+  const simulated = (emailResult?.simulated || lineResult?.simulated);
+  if (tab === 'both') {
+    const emailOk = emailResult?.success, lineOk = lineResult?.success;
+    if (emailOk && lineOk) {
+      showToast(simulated
+        ? '📧💬 [模擬] Email + LINE Bot 通報已記錄（請執行 server.py 並設定 SMTP/LINE Token）'
+        : '✅ Email + LINE Bot 同步通報已發送！', 'success', 5000);
+    } else {
+      showToast(`⚠ Email:${emailOk?'✓':'✗'} LINE:${lineOk?'✓':'✗'} 部分發送失敗`, 'warn', 5000);
+    }
+  } else if (tab === 'email') {
+    showToast(simulated
+      ? '📧 [模擬] Email 通報已記錄（請設定 server.py 中的 SMTP）'
+      : `✅ Email 已發送至 ${recipients.length} 位管理者`, 'success', 4000);
+  } else {
+    showToast(simulated
+      ? '💬 [模擬] LINE Bot 通報已記錄（請設定 LINE Channel Token）'
+      : '✅ LINE Bot 推播已發送！', 'success', 4000);
+  }
 }
 
 // ── Admin modal ──
@@ -602,8 +691,22 @@ function handleChipInput(e) {
 function removeChip(btn) { btn.parentElement.remove(); }
 
 // ── LINE Bot test ──
-function testLineBot() {
-  showToast('LINE Bot 測試訊息已發送 ✓', 'success');
+async function testLineBot() {
+  showToast('發送 LINE Bot 測試訊息中…', 'info');
+  const testMsg = `🧪 SmokeSentry 測試訊息\n━━━━━━━━━━━━━━\n時間：${new Date().toLocaleString('zh-TW')}\n狀態：系統運作正常\n✅ LINE Bot 連線成功`;
+  try {
+    const res = await fetch('http://localhost:5000/api/send-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: testMsg, targets: ['GROUP_DEFAULT'] })
+    });
+    const data = await res.json();
+    showToast(data.simulated
+      ? '💬 [模擬] 測試訊息已記錄（請設定 LINE Channel Token）'
+      : '✅ LINE Bot 測試訊息已發送！', 'success', 4000);
+  } catch {
+    showToast('💬 [模擬] LINE Bot 測試（server.py 未執行）', 'warn', 3000);
+  }
 }
 
 // ── Notify all modal listener ──

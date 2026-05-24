@@ -127,11 +127,58 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
 <script src="shared.js"></script>
 <script>
 injectShell('通知設定');
-function testEmail() { showToast('測試 Email 已發送至 smokesentry@school.edu.tw', 'success'); }
+
+const SERVER = 'http://localhost:5000';
+
+async function testEmail() {
+  showToast('發送測試 Email 中…', 'info');
+  const sender = document.querySelector('input[value="smokesentry@school.edu.tw"]')?.value || 'smokesentry@school.edu.tw';
+  try {
+    const res = await fetch(`${SERVER}/api/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipients: [sender],
+        subject: '【SmokeSentry】Email SMTP 連線測試',
+        body: `SMTP 連線測試\n時間：${new Date().toLocaleString('zh-TW')}\n結果：連線成功 ✓`,
+        urgency: 'low'
+      })
+    });
+    const data = await res.json();
+    showToast(data.simulated
+      ? '📧 [模擬] 測試 Email 記錄完成（請在 server.py 中設定 SMTP）'
+      : '✅ 測試 Email 已成功發送！', data.simulated ? 'warn' : 'success', 4000);
+  } catch {
+    showToast('📧 [模擬] 測試 Email（server.py 未執行）', 'warn', 3000);
+  }
+}
+
 function saveEmail() { showToast('Email 設定已儲存', 'success'); }
-function testLine() { showToast('LINE Bot 測試訊息已推播至群組', 'success'); }
+
+async function testLine() {
+  showToast('發送 LINE Bot 測試訊息中…', 'info');
+  const testMsg = `🧪 SmokeSentry LINE Bot 連線測試\n━━━━━━━━━━━━━━\n時間：${new Date().toLocaleString('zh-TW')}\n✅ 連線正常`;
+  try {
+    const res = await fetch(`${SERVER}/api/send-line`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: testMsg, targets: ['GROUP_DEFAULT'] })
+    });
+    const data = await res.json();
+    showToast(data.simulated
+      ? '💬 [模擬] LINE 測試訊息記錄完成（請在 server.py 中設定 Channel Token）'
+      : '✅ LINE Bot 測試訊息已推播！', data.simulated ? 'warn' : 'success', 4000);
+  } catch {
+    showToast('💬 [模擬] LINE Bot 測試（server.py 未執行）', 'warn', 3000);
+  }
+}
+
 function saveLine() { showToast('LINE Bot 設定已儲存', 'success'); }
-function saveSyncRules() { showToast('同步規則已儲存', 'success'); }
+
+async function saveSyncRules() {
+  showToast('同步規則已儲存', 'success');
+  // 可在此呼叫後端儲存設定
+}
 </script>
 </body>
 </html>

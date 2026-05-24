@@ -93,7 +93,12 @@
       <div class="cam-main">
         <div id="camGridContainer" class="cam-grid-2x2">
           <div class="cam-cell-big" id="cell0" onclick="focusCam(0)">
-            <canvas id="cv0"></canvas>
+            <!-- 真實串流（優先） -->
+            <img id="cam01-live"
+                 src="http://localhost:5000/video_feed"
+                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#050a0f;z-index:1;"
+                 onerror="this.style.display='none';document.getElementById('cv0').style.zIndex='1';">
+            <canvas id="cv0" style="position:relative;z-index:0;"></canvas>
             <div class="cam-overlay">
               <div class="cam-hud-tl" id="hud0tl">FPS: 30<br>YOLOv8n</div>
               <div class="cam-hud-tr" id="hud0tr">CAM-01<br>B棟廁所</div>
