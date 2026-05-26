@@ -81,7 +81,7 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
               </div>
             </div>
             <div class="form-group"><div class="form-label">Channel Secret</div><input type="password" class="input-field" value="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
-            <div class="form-group"><div class="form-label">預設群組 Chat ID</div><input type="text" class="input-field" value="Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" placeholder="群組 ID（C 開頭）"></div>
+            <div class="form-group"><div class="form-label">預設 User / Group ID</div><input type="text" class="input-field" value="U7096788b7ec534ad48ca473335c38aac" placeholder="User ID（U開頭）或群組 ID（C開頭）"></div>
             <div style="background:rgba(0,180,255,.05);border:1px solid var(--border);padding:.9rem;font-size:.8rem;color:var(--text-muted);line-height:1.7">
               📖 如何取得 Chat ID：<br>
               1. 將 Bot 加入目標群組<br>
@@ -162,7 +162,7 @@ async function testLine() {
     const res = await fetch(`${SERVER}/api/send-line`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: testMsg, targets: ['GROUP_DEFAULT'] })
+      body: JSON.stringify({ message: testMsg, targets: ['U7096788b7ec534ad48ca473335c38aac'] })
     });
     const data = await res.json();
     showToast(data.simulated

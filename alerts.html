@@ -571,8 +571,8 @@ function getRecipients() {
 // ── 從 UI 收集 LINE 勾選目標 ──
 function getLineTargets() {
   const active = admins.filter(a => a.active && a.line);
-  // 若無設定 line id 則用管理員 email 做記錄
-  return active.length ? active.map(a => a.line) : ['GROUP_DEFAULT'];
+  // 預設發送給系統設定的 LINE User ID
+  return active.length ? active.map(a => a.line) : ['U7096788b7ec534ad48ca473335c38aac'];
 }
 
 async function confirmSend() {
@@ -698,7 +698,7 @@ async function testLineBot() {
     const res = await fetch('http://localhost:5000/api/send-line', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: testMsg, targets: ['GROUP_DEFAULT'] })
+      body: JSON.stringify({ message: testMsg, targets: ['U7096788b7ec534ad48ca473335c38aac'] })
     });
     const data = await res.json();
     showToast(data.simulated
@@ -715,6 +715,45 @@ document.getElementById('mailNote').addEventListener('input', updateEmailPreview
 // Init
 renderAlerts();
 renderAdmins();
+
+// ── 預填管理者 LINE ID ──
+admins[0].line = 'U7096788b7ec534ad48ca473335c38aac';
+renderAdmins();
+
+// ── 輪詢真實警示（從 server.py /api/alerts）──
+let lastAlertCount = 0;
+async function pollRealAlerts() {
+  try {
+    const res  = await fetch('http://localhost:5000/api/alerts');
+    const data = await res.json();
+    const realAlerts = data.alerts || [];
+    if (realAlerts.length > lastAlertCount) {
+      // 有新警示 → 插入到 ALERTS 陣列最前面
+      const newOnes = realAlerts.slice(0, realAlerts.length - lastAlertCount);
+      newOnes.forEach((a, idx) => {
+        const isHigh = a.type.toLowerCase().includes('smoking') || a.type.toLowerCase().includes('ignition');
+        ALERTS.unshift({
+          id: 1000 + Date.now() + idx,
+          type: isHigh ? 'danger' : 'warn',
+          title: `${a.type} — ${a.location}`,
+          time: a.time,
+          cam: 'CAM-01',
+          loc: a.location,
+          conf: a.confidence,
+          status: 'unread',
+          desc: `MediaPipe 即時偵測 — ${a.type}，信心度 ${a.confidence}%，已自動觸發 LINE Bot 通報。`,
+        });
+      });
+      lastAlertCount = realAlerts.length;
+      renderAlerts();
+      // 更新警示計數
+      const bellBadge = document.querySelector('.bell-badge');
+      if (bellBadge) bellBadge.textContent = ALERTS.filter(a => a.status === 'unread').length;
+    }
+  } catch { /* server offline */ }
+}
+setInterval(pollRealAlerts, 5000);
+pollRealAlerts();
 </script>
 </body>
 </html>

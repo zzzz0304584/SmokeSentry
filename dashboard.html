@@ -192,6 +192,39 @@ setInterval(()=>{
     if(el){el.textContent=v+' AQI';}if(bar){bar.style.width=Math.min(v/1000*100,100)+'%';}
   });
 },2000);
+
+// ── 從 server.py 輪詢即時警示插入表格 ──
+let dashAlertCount = 0;
+async function pollDashAlerts() {
+  try {
+    const res  = await fetch('http://localhost:5000/api/alerts');
+    const data = await res.json();
+    const list = data.alerts || [];
+    if (list.length > dashAlertCount) {
+      const newOnes = list.slice(0, list.length - dashAlertCount);
+      const tbody   = document.getElementById('recentEvt');
+      newOnes.reverse().forEach(a => {
+        const isHigh = a.type.toLowerCase().includes('smoking') || a.type.toLowerCase().includes('ignition');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-muted)">${a.time}</td>
+          <td style="font-size:.82rem">${a.location}</td>
+          <td><span class="badge ${isHigh?'badge-danger':'badge-warn'}">${a.type}</span></td>
+          <td><span class="badge badge-warn">已通報</span></td>`;
+        tbody.insertBefore(row, tbody.firstChild);
+        // 閃爍提示
+        row.style.background='rgba(255,58,92,.08)';
+        setTimeout(()=>row.style.background='',2000);
+      });
+      dashAlertCount = list.length;
+      // 更新今日警示數
+      const sc = document.querySelector('.sc-value[style*="danger"]');
+      if (sc) sc.textContent = Math.min(99, parseInt(sc.textContent||'0') + newOnes.length);
+    }
+  } catch { /* server offline */ }
+}
+setInterval(pollDashAlerts, 6000);
+pollDashAlerts();
 </script>
 </body>
 </html>
