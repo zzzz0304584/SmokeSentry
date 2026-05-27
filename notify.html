@@ -458,7 +458,7 @@ async function saveSyncRules() {
 // ══════════════════════════════════════════════════════════
 
 /* ── 可調參數區 ── */
-const BEEP_FREQ_HZ     = 800;   // 🔔 修改此值改變音調（Hz）
+const BEEP_FREQ_HZ     = 880;   // 🔔 修改此值改變音調（Hz）
 const BEEP_DURATION    = 0.18;  // 🔔 每聲嗶聲長度（秒）
 const BEEP_GAP         = 0.12;  // 🔔 嗶聲間隔（秒）
 const BEEP_REPEAT_COUNT = 3;    // 🔔 重複次數（三連嗶 = 3）
@@ -483,7 +483,7 @@ function playAlertTone(volume = 75) {
 
     const start = ctx.currentTime + i * (BEEP_DURATION + BEEP_GAP);
     const end   = start + BEEP_DURATION;
-    
+
     gainNode.gain.setValueAtTime(0, start);
     gainNode.gain.linearRampToValueAtTime(volume / 100, start + 0.01);
     gainNode.gain.setValueAtTime(volume / 100, end - 0.01);
@@ -493,6 +493,7 @@ function playAlertTone(volume = 75) {
     osc.stop(end);
   }
 }
+
 // ══════════════════════════════════════════════════════════
 //  🚨 整合測試：同步執行 Email + LINE + Vifa 警報音
 // ══════════════════════════════════════════════════════════

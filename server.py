@@ -36,11 +36,20 @@ EMAIL_CONFIG = {
     'use_tls':   True,
 }
 
+# ⚠️  收件人清單：填入真正要收到警報 Email 的信箱，可填多個
+#     這裡填的是「收件人」，不是寄件人
+NOTIFY_RECIPIENTS = [
+    'smokesentry.ai.alert@gmail.com',  # ← 換成你要收信的 Email
+    # 'manager@school.edu.tw',         # ← 可新增多個收件人
+]
+
 # LINE Messaging API
 LINE_CONFIG = {
     'channel_id':     '2010200164',
     'channel_secret': 'b48958f7ace83369c958dba4e24256b7',
-    'channel_token':  'b48958f7ace83369c958dba4e24256b7',  # Channel Secret 作 Token（請視情況換成 Long-lived token）
+    # ⚠️  channel_token = Long-lived Channel Access Token（非 Channel Secret）
+    #     LINE Developers Console → Messaging API 頁籤 → Channel access token → Issue
+    'channel_token':  '',  # ← 貼上 Long-lived Channel Access Token
     'default_target': 'U7096788b7ec534ad48ca473335c38aac',  # User ID
 }
 
@@ -471,8 +480,9 @@ def send_email():
     body       = data.get('body',       '（無內容）')
     urgency    = data.get('urgency',    'med')
 
+    # 若前端沒傳收件人，改用 NOTIFY_RECIPIENTS 收件清單
     if not recipients:
-        return jsonify({'success': False, 'message': '未指定收件人'}), 400
+        recipients = NOTIFY_RECIPIENTS
 
     ok, err = _send_email_sync(recipients, subject, body, urgency)
     if ok:
