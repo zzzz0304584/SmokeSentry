@@ -457,43 +457,90 @@ async function saveSyncRules() {
 //  若要改用音效檔（.mp3/.wav），參考下方 playAlertFile() 的說明。
 // ══════════════════════════════════════════════════════════
 
-/* ── 可調參數區 ── */
-const BEEP_FREQ_HZ     = 800;   // 🔔 修改此值改變音調（Hz）
-const BEEP_DURATION    = 0.18;  // 🔔 每聲嗶聲長度（秒）
-const BEEP_GAP         = 0.12;  // 🔔 嗶聲間隔（秒）
-const BEEP_REPEAT_COUNT = 3;    // 🔔 重複次數（三連嗶 = 3）
+/* ── 防空警報參數區 ── */
+const SIREN_LOW_FREQ   = 220;   // 🔔 警報最低音調（低沈）
+const SIREN_HIGH_FREQ  = 480;   // 🔔 警報最高音調（尖銳）
+const SIREN_CYCLE_TIME = 2.5;   // 🔔 音調上下擺動一次需要幾秒（二戰警報感約 2.5s - 4s）
+
+// 用來記錄定時器與音訊物件，以便日後可以手動停止
+let sirenInterval = null;
+let currentOsc = null;
+let currentGainNode = null;
+let audioCtx = null;
 
 /**
- * 用 Web Audio API 在瀏覽器端播放警報音。
- * 若要換成音效檔，把此函式內容換成：
- *   const audio = new Audio('your_alarm.mp3');  // 🔔 換成你的音效檔路徑
- *   audio.volume = volume / 100;
- *   audio.play();
+ * 用 Web Audio API 模擬防空警報
+ * 呼叫此函式會啟動長鳴警報，直到呼叫 stopAlertSiren() 才會停止
  */
 function playAlertTone(volume = 75) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const gainNode = ctx.createGain();
-  gainNode.connect(ctx.destination);
+  // 防呆：如果已經在響了，就不重複啟動
+  if (sirenInterval) return;
 
-  for (let i = 0; i < BEEP_REPEAT_COUNT; i++) {
-    const osc = ctx.createOscillator();
-    osc.type = 'square';              // 🔔 波形：square=刺耳警報感，sine=柔和，sawtooth=粗糙
-    osc.frequency.value = BEEP_FREQ_HZ;
-    osc.connect(gainNode);
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  currentOsc = audioCtx.createOscillator();
+  currentGainNode = audioCtx.createGain();
 
-    const start = ctx.currentTime + i * (BEEP_DURATION + BEEP_GAP);
-    const end   = start + BEEP_DURATION;
+  // 1. 設定波形：'sawtooth' (鋸齒波) 最符合老式機械警報器的撕裂感與厚重感
+  currentOsc.type = 'sawtooth'; 
+  
+  // 2. 初始化起點頻率與音量
+  currentOsc.frequency.setValueAtTime(SIREN_LOW_FREQ, audioCtx.currentTime);
+  currentGainNode.gain.setValueAtTime(volume / 100, audioCtx.currentTime);
 
-    gainNode.gain.setValueAtTime(0, start);
-    gainNode.gain.linearRampToValueAtTime(volume / 100, start + 0.01);
-    gainNode.gain.setValueAtTime(volume / 100, end - 0.01);
-    gainNode.gain.linearRampToValueAtTime(0, end);
+  // 3. 連接節點
+  currentOsc.connect(currentGainNode);
+  currentGainNode.connect(audioCtx.destination);
+  currentOsc.start();
 
-    osc.start(start);
-    osc.stop(end);
-  }
+  // 4. 觸發第一次爬升（立刻往高音滑行）
+  let isRising = false; // 第一次啟動時立刻往高音跑，所以下一個目標是低音 (isRising = false)
+  currentOsc.frequency.linearRampToValueAtTime(SIREN_HIGH_FREQ, audioCtx.currentTime + SIREN_CYCLE_TIME);
+
+  // 5. 使用計時器讓音調持續像波浪一樣規律起伏
+  sirenInterval = setInterval(() => {
+    const now = audioCtx.currentTime;
+    if (isRising) {
+      // 平滑爬升到高音
+      currentOsc.frequency.linearRampToValueAtTime(SIREN_HIGH_FREQ, now + SIREN_CYCLE_TIME);
+    } else {
+      // 平滑滑落到低音
+      currentOsc.frequency.linearRampToValueAtTime(SIREN_LOW_FREQ, now + SIREN_CYCLE_TIME);
+    }
+    isRising = !isRising; // 切換下一次的起伏方向
+  }, SIREN_CYCLE_TIME * 1000);
 }
 
+/**
+ * 停止防空警報（模擬警報器斷電後，聲音漸漸平息的效果）
+ */
+function stopAlertSiren() {
+  if (sirenInterval) {
+    clearInterval(sirenInterval);
+    sirenInterval = null;
+
+    const now = audioCtx.currentTime;
+    // 取消所有後面排隊的頻率與音量變化
+    currentOsc.frequency.cancelScheduledValues(now);
+    currentGainNode.gain.cancelScheduledValues(now);
+
+    // 讓音量在 0.8 秒內線性滑落到 0，聽起來更逼真
+    currentGainNode.gain.linearRampToValueAtTime(0, now + 0.8);
+
+    // 1 秒後徹底關閉音訊環境與震盪器
+    setTimeout(() => {
+      if (currentOsc) {
+        currentOsc.stop();
+        currentOsc.disconnect();
+      }
+      if (audioCtx) {
+        audioCtx.close();
+      }
+      currentOsc = null;
+      currentGainNode = null;
+      audioCtx = null;
+    }, 1000);
+  }
+}
 // ══════════════════════════════════════════════════════════
 //  🚨 整合測試：同步執行 Email + LINE + Vifa 警報音
 // ══════════════════════════════════════════════════════════
