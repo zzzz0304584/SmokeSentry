@@ -457,61 +457,57 @@ async function saveSyncRules() {
 //  若要改用音效檔（.mp3/.wav），參考下方 playAlertFile() 的說明。
 // ══════════════════════════════════════════════════════════
 
-/* ── 防空警報參數區 ── */
-const SIREN_LOW_FREQ   = 220;   // 🔔 警報最低音調（低沈）
-const SIREN_HIGH_FREQ  = 480;   // 🔔 警報最高音調（尖銳）
-const SIREN_CYCLE_TIME = 2.5;   // 🔔 音調上下擺動一次需要幾秒（二戰警報感約 2.5s - 4s）
+/* ── 終極緊張感參數區 ── */
+const SIREN_LOW_FREQ   = 300;   // 🔔 警報最低音調（拉高基音，避免低音時顯得平穩）
+const SIREN_HIGH_FREQ  = 650;   // 🔔 警報最高音調（拉高到 650Hz，極具穿透力與緊迫感）
+const SIREN_CYCLE_TIME = 0.6;   // 🔔 急速擺動（0.6 秒就上下拉扯一次，創造極度恐慌與緊張感）
 
-// 用來記錄定時器與音訊物件，以便日後可以手動停止
 let sirenInterval = null;
 let currentOsc = null;
 let currentGainNode = null;
 let audioCtx = null;
 
 /**
- * 用 Web Audio API 模擬防空警報
- * 呼叫此函式會啟動長鳴警報，直到呼叫 stopAlertSiren() 才會停止
+ * 啟動高緊張感防空警報（從最高音瞬間起手、急速擺動）
  */
-function playAlertTone(volume = 75) {
-  // 防呆：如果已經在響了，就不重複啟動
+function playAlertTone(volume = 85) { // 稍微調高預設音量，增加震撼力
   if (sirenInterval) return;
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   currentOsc = audioCtx.createOscillator();
   currentGainNode = audioCtx.createGain();
 
-  // 1. 設定波形：'sawtooth' (鋸齒波) 最符合老式機械警報器的撕裂感與厚重感
+  // 使用 'sawtooth' (鋸齒波) 帶有強烈的機械摩擦與撕裂感
   currentOsc.type = 'sawtooth'; 
   
-  // 2. 初始化起點頻率與音量
-  currentOsc.frequency.setValueAtTime(SIREN_LOW_FREQ, audioCtx.currentTime);
+  // 🚀 【關鍵修正】一開始就直接把頻率設定在最高點 (SIREN_HIGH_FREQ)，瞬間破音起手！
+  currentOsc.frequency.setValueAtTime(SIREN_HIGH_FREQ, audioCtx.currentTime);
   currentGainNode.gain.setValueAtTime(volume / 100, audioCtx.currentTime);
 
-  // 3. 連接節點
   currentOsc.connect(currentGainNode);
   currentGainNode.connect(audioCtx.destination);
   currentOsc.start();
 
-  // 4. 觸發第一次爬升（立刻往高音滑行）
-  let isRising = false; // 第一次啟動時立刻往高音跑，所以下一個目標是低音 (isRising = false)
-  currentOsc.frequency.linearRampToValueAtTime(SIREN_HIGH_FREQ, audioCtx.currentTime + SIREN_CYCLE_TIME);
+  // 🚀 【關鍵修正】因為從最高點起手，所以第一個下滑目標是「低音點」
+  let isToHigh = false; 
+  currentOsc.frequency.linearRampToValueAtTime(SIREN_LOW_FREQ, audioCtx.currentTime + SIREN_CYCLE_TIME);
 
-  // 5. 使用計時器讓音調持續像波浪一樣規律起伏
+  // 每隔固定時間（毫秒）在最高音與最低音之間瘋狂切換
   sirenInterval = setInterval(() => {
     const now = audioCtx.currentTime;
-    if (isRising) {
-      // 平滑爬升到高音
+    if (isToHigh) {
+      // 瞬間衝向高音
       currentOsc.frequency.linearRampToValueAtTime(SIREN_HIGH_FREQ, now + SIREN_CYCLE_TIME);
     } else {
-      // 平滑滑落到低音
+      // 急速滑落到低音
       currentOsc.frequency.linearRampToValueAtTime(SIREN_LOW_FREQ, now + SIREN_CYCLE_TIME);
     }
-    isRising = !isRising; // 切換下一次的起伏方向
+    isToHigh = !isToHigh; // 切換下一次的衝刺目標
   }, SIREN_CYCLE_TIME * 1000);
 }
 
 /**
- * 停止防空警報（模擬警報器斷電後，聲音漸漸平息的效果）
+ * 停止警報
  */
 function stopAlertSiren() {
   if (sirenInterval) {
@@ -519,14 +515,12 @@ function stopAlertSiren() {
     sirenInterval = null;
 
     const now = audioCtx.currentTime;
-    // 取消所有後面排隊的頻率與音量變化
     currentOsc.frequency.cancelScheduledValues(now);
     currentGainNode.gain.cancelScheduledValues(now);
 
-    // 讓音量在 0.8 秒內線性滑落到 0，聽起來更逼真
-    currentGainNode.gain.linearRampToValueAtTime(0, now + 0.8);
+    // 緊張感警報切斷時，淡出要快（0.4秒），顯得戛然而止、驚魂未定
+    currentGainNode.gain.linearRampToValueAtTime(0, now + 0.4);
 
-    // 1 秒後徹底關閉音訊環境與震盪器
     setTimeout(() => {
       if (currentOsc) {
         currentOsc.stop();
@@ -538,7 +532,7 @@ function stopAlertSiren() {
       currentOsc = null;
       currentGainNode = null;
       audioCtx = null;
-    }, 1000);
+    }, 500);
   }
 }
 // ══════════════════════════════════════════════════════════
