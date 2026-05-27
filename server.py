@@ -13,6 +13,7 @@ import time
 import threading
 import os
 import smtplib
+import subprocess
 import urllib.request
 import urllib.error
 import json as _json
@@ -41,6 +42,33 @@ LINE_CONFIG = {
     'channel_secret': 'b48958f7ace83369c958dba4e24256b7',
     'channel_token':  'b48958f7ace83369c958dba4e24256b7',  # Channel Secret 作 Token（請視情況換成 Long-lived token）
     'default_target': 'U7096788b7ec534ad48ca473335c38aac',  # User ID
+}
+
+# ══════════════════════════════════════════════════════════════
+#  🔊 Vifa 藍牙音響設定
+#  ──────────────────────────────────────────────────────────────
+#  VIFA_MAC      : Vifa 裝置的藍牙 MAC 位址（配對後填入）
+#                  格式：'AA:BB:CC:DD:EE:FF'
+#  VIFA_VOLUME   : 預設播放音量（0–100）
+#  ALERT_SOUNDS  : 鈴聲類型對應的音效檔路徑
+#                  🔔 若要替換鈴聲，修改此字典中對應的檔案路徑。
+#                     音效檔放在專案資料夾中，支援 .mp3 / .wav / .ogg。
+#                     播放使用 mpg123（mp3）或 aplay（wav）；
+#                     請確認主機已安裝對應播放器：
+#                       sudo apt install mpg123  （mp3）
+#                       sudo apt install alsa-utils  （wav/ogg via aplay）
+#  ══════════════════════════════════════════════════════════════
+VIFA_CONFIG = {
+    'mac':    '',          # 🔔 填入 Vifa 的 MAC 位址，例：'AA:BB:CC:DD:EE:FF'
+    'volume': 75,          # 🔔 預設音量（0–100）
+}
+
+#  🔔 替換鈴聲：修改下方 value 為你的音效檔路徑（相對於 server.py 所在目錄）
+ALERT_SOUNDS = {
+    'beep_triple':  None,           # None = 使用前端 Web Audio 合成音，不需音效檔
+    'siren_short':  'sounds/siren_short.mp3',   # 🔔 替換此路徑即可換鈴聲
+    'chime_alert':  'sounds/chime_alert.wav',   # 🔔 替換此路徑即可換鈴聲
+    # 'my_alarm':   'sounds/my_alarm.mp3',      # 🔔 自訂：新增一行並在 notify.html <option> 對應
 }
 
 # ============================================================
@@ -574,6 +602,118 @@ def send_both():
 
 
 # ============================================================
+# 🔊 Vifa 藍牙音響 API
+# ============================================================
+
+def _bt_is_available():
+    """檢查主機藍牙是否可用（bluetoothctl 是否存在）"""
+    return subprocess.run(['which', 'bluetoothctl'],
+                         capture_output=True).returncode == 0
+
+@app.route('/api/vifa/scan', methods=['POST'])
+def vifa_scan():
+    """掃描附近藍牙裝置，尋找名稱含 'Vifa' 的音響"""
+    if not _bt_is_available():
+        return jsonify({'found': False, 'error': '主機未安裝 bluetoothctl'})
+    try:
+        # 開啟掃描 5 秒
+        subprocess.run(['bluetoothctl', 'scan', 'on'],
+                       capture_output=True, timeout=6)
+        result = subprocess.run(['bluetoothctl', 'devices'],
+                                capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines():
+            if 'Vifa' in line or 'vifa' in line:
+                parts = line.split(' ', 2)
+                mac   = parts[1] if len(parts) > 1 else ''
+                name  = parts[2] if len(parts) > 2 else 'Vifa Speaker'
+                VIFA_CONFIG['mac'] = mac
+                return jsonify({'found': True, 'mac': mac, 'name': name})
+        return jsonify({'found': False})
+    except Exception as e:
+        return jsonify({'found': False, 'error': str(e)})
+
+
+@app.route('/api/vifa/connect', methods=['POST'])
+def vifa_connect():
+    """
+    透過 bluetoothctl 配對並連線 Vifa。
+    POST body: { "mac": "AA:BB:CC:DD:EE:FF" }
+    """
+    data = request.get_json(silent=True) or {}
+    mac  = data.get('mac', VIFA_CONFIG['mac']).strip()
+    if not mac:
+        return jsonify({'ok': False, 'error': '未提供 MAC 位址'})
+    if not _bt_is_available():
+        return jsonify({'ok': False, 'error': '主機未安裝 bluetoothctl'})
+    try:
+        # 嘗試配對
+        subprocess.run(['bluetoothctl', 'pair', mac],
+                       capture_output=True, timeout=15)
+        # 連線
+        result = subprocess.run(['bluetoothctl', 'connect', mac],
+                                capture_output=True, text=True, timeout=15)
+        ok = 'successful' in result.stdout.lower() or 'connected' in result.stdout.lower()
+        if ok:
+            VIFA_CONFIG['mac'] = mac
+        return jsonify({'ok': ok, 'output': result.stdout})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+
+@app.route('/api/vifa/alert', methods=['POST'])
+def vifa_alert():
+    """
+    透過已連線的 Vifa 播放警報音效。
+    POST body: { "mac": "...", "volume": 75, "sound": "beep_triple" }
+
+    播放流程：
+      1. 確認藍牙連線
+      2. 依 sound 類型找對應音效檔
+      3. 使用 mpg123 / aplay 播放到藍牙輸出裝置
+
+    🔔 替換鈴聲：修改上方 ALERT_SOUNDS 字典中的檔案路徑，
+       或在此函式中調整 subprocess 呼叫的命令列參數。
+    """
+    data   = request.get_json(silent=True) or {}
+    mac    = data.get('mac',    VIFA_CONFIG['mac'])
+    volume = int(data.get('volume', VIFA_CONFIG['volume']))
+    sound  = data.get('sound',  'beep_triple')
+
+    sound_file = ALERT_SOUNDS.get(sound)
+
+    # 若無音效檔（beep_triple 預設為 None），前端 Web Audio 已處理，後端僅回 ok
+    if not sound_file or not os.path.exists(sound_file):
+        # 若想改用後端產生警報，可在此用 `speaker-test` 或 `paplay` 替代
+        # 例：subprocess.run(['speaker-test', '-t', 'sine', '-f', '880', '-l', '1'])
+        return jsonify({'ok': True, 'note': '前端 Web Audio 播放，後端無音效檔'})
+
+    try:
+        # 設定藍牙音訊輸出（PulseAudio）
+        # 🔔 若主機使用 PipeWire，將 'pacmd' 換成對應指令
+        subprocess.run(['pactl', 'set-default-sink',
+                        f'bluez_sink.{mac.replace(":", "_")}.a2dp_sink'],
+                       capture_output=True, timeout=5)
+        subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@',
+                        f'{volume}%'],
+                       capture_output=True, timeout=5)
+
+        # 播放音效檔
+        # 🔔 若要換播放器：將 'mpg123' 換成 'aplay'（wav）或 'ogg123'（ogg）
+        ext = os.path.splitext(sound_file)[1].lower()
+        if ext == '.mp3':
+            player = ['mpg123', '-q', sound_file]
+        elif ext in ('.wav', '.ogg'):
+            player = ['aplay', sound_file]
+        else:
+            player = ['mpg123', '-q', sound_file]
+
+        subprocess.Popen(player)  # 非同步播放，不阻塞 API 回應
+        return jsonify({'ok': True, 'played': sound_file})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+
+# ============================================================
 # 啟動
 # ============================================================
 if __name__ == '__main__':
@@ -592,6 +732,9 @@ if __name__ == '__main__':
     print("    POST /api/send-email    Email 通報")
     print("    POST /api/send-line     LINE Bot 推播")
     print("    POST /api/send-both     Email + LINE 同步")
+    print("    POST /api/vifa/scan     掃描 Vifa 藍牙裝置")
+    print("    POST /api/vifa/connect  連線 Vifa 藍牙音響")
+    print("    POST /api/vifa/alert    Vifa 播放警報音")
     print()
     print("  LINE Bot  → User ID:", LINE_CONFIG['default_target'])
     print("  Email     → 從:", EMAIL_CONFIG['sender'])

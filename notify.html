@@ -22,7 +22,64 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
 .conn-dot { width:8px;height:8px;border-radius:50%;animation:pulse 2s infinite; }
 .conn-ok { background:var(--safe); }
 .conn-fail { background:var(--danger); }
+.conn-warn { background:var(--warn); }
 .conn-row { display:flex; align-items:center; gap:.8rem; }
+
+/* ── Vifa 藍牙音響卡片 ── */
+.vifa-status-bar {
+  display:flex; align-items:center; justify-content:space-between;
+  background:rgba(0,180,255,.04); border:1px solid var(--border);
+  padding:.8rem 1.2rem; margin-bottom:.8rem; font-family:var(--font-mono); font-size:.75rem;
+}
+.vifa-device-name { color:var(--accent); font-weight:600; }
+.vifa-signal { display:flex; gap:3px; align-items:flex-end; }
+.vifa-signal span {
+  display:inline-block; width:4px; background:var(--text-muted); border-radius:1px;
+  transition:background .3s;
+}
+.vifa-signal span:nth-child(1) { height:5px; }
+.vifa-signal span:nth-child(2) { height:9px; }
+.vifa-signal span:nth-child(3) { height:13px; }
+.vifa-signal span:nth-child(4) { height:17px; }
+.vifa-signal.connected span { background:var(--safe); }
+.vifa-signal.disconnected span { background:var(--danger); }
+
+/* ── 整合測試按鈕區 ── */
+.test-panel {
+  border:1px solid rgba(255,58,92,.25);
+  background:rgba(255,58,92,.04);
+  padding:1.2rem;
+  position:relative;
+  overflow:hidden;
+}
+.test-panel::before {
+  content:'LIVE TEST';
+  position:absolute; top:.5rem; right:.7rem;
+  font-family:var(--font-mono); font-size:.55rem; color:rgba(255,58,92,.5);
+  letter-spacing:.1em;
+}
+.test-result-log {
+  background:var(--bg); border:1px solid var(--border);
+  font-family:var(--font-mono); font-size:.72rem; color:var(--text-muted);
+  padding:.8rem 1rem; max-height:140px; overflow-y:auto;
+  line-height:1.8; margin-top:.8rem; display:none;
+}
+.test-result-log.show { display:block; }
+.log-ok  { color:var(--safe); }
+.log-err { color:var(--danger); }
+.log-info { color:var(--accent); }
+.log-warn { color:var(--warn); }
+
+/* 測試按鈕進度環 */
+.btn-test-all {
+  background:linear-gradient(135deg,rgba(255,58,92,.8),rgba(255,100,60,.8));
+  color:#fff; border:none; padding:.75rem 1.8rem;
+  font-family:var(--font-display); font-weight:700; font-size:.9rem;
+  cursor:pointer; transition:all .2s; display:inline-flex; align-items:center; gap:.5rem;
+  width:100%; justify-content:center; letter-spacing:.04em;
+}
+.btn-test-all:hover:not(:disabled) { filter:brightness(1.15); transform:translateY(-1px); }
+.btn-test-all:disabled { opacity:.5; cursor:not-allowed; transform:none; }
 </style>
 </head>
 <body>
@@ -32,8 +89,10 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
   <div class="content">
 
     <div class="grid-2" style="align-items:start">
-      <!-- EMAIL settings -->
+      <!-- ── 左欄：Email + LINE ── -->
       <div style="display:flex;flex-direction:column;gap:1rem">
+
+        <!-- Email SMTP -->
         <div class="card">
           <div class="card-header"><div class="card-title">📧 Email SMTP 設定</div>
             <div class="conn-status"><div class="conn-dot conn-ok"></div><span style="color:var(--safe)">已連線</span></div>
@@ -54,6 +113,7 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
           </div>
         </div>
 
+        <!-- Email 通知規則 -->
         <div class="card">
           <div class="card-header"><div class="card-title">📧 Email 通知規則</div></div>
           <div>
@@ -65,10 +125,13 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
             <div class="setting-row"><div class="setting-info"><div class="setting-name">附加截圖</div><div class="setting-desc">Email 中附上事件截圖（打碼後）</div></div><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
           </div>
         </div>
+
       </div>
 
-      <!-- LINE Bot settings -->
+      <!-- ── 右欄：LINE Bot + Vifa + 整合測試 ── -->
       <div style="display:flex;flex-direction:column;gap:1rem">
+
+        <!-- LINE Bot 設定 -->
         <div class="card">
           <div class="card-header"><div class="card-title">💬 LINE Bot 設定</div>
             <div class="conn-status"><div class="conn-dot conn-ok"></div><span style="color:var(--safe)">已連線</span></div>
@@ -95,6 +158,7 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
           </div>
         </div>
 
+        <!-- LINE 通知規則 -->
         <div class="card">
           <div class="card-header"><div class="card-title">💬 LINE 通知規則</div></div>
           <div>
@@ -106,10 +170,96 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
           </div>
         </div>
 
+        <!-- ════════════════════════════════════
+             🔊 Vifa 藍牙音響設定
+             ════════════════════════════════════ -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔊 Vifa 藍牙音響設定</div>
+            <div class="conn-status" id="vifaConnStatus">
+              <div class="conn-dot conn-warn" id="vifaConnDot"></div>
+              <span id="vifaConnLabel" style="color:var(--warn)">未連線</span>
+            </div>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.8rem">
+
+            <!-- 裝置訊號狀態列 -->
+            <div class="vifa-status-bar">
+              <span>裝置：<span class="vifa-device-name" id="vifaDeviceName">— 尚未配對 —</span></span>
+              <div class="vifa-signal disconnected" id="vifaSignal">
+                <span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <!-- 配對說明 -->
+            <div style="background:rgba(0,180,255,.05);border:1px solid var(--border);padding:.9rem;font-size:.8rem;color:var(--text-muted);line-height:1.7">
+              📖 配對步驟：<br>
+              1. 在執行 server.py 的主機上啟用藍牙<br>
+              2. 長按 Vifa 電源鍵 3 秒進入配對模式<br>
+              3. 點擊「掃描裝置」找到 Vifa 後點選配對<br>
+              4. 配對成功後即可使用警報功能
+            </div>
+
+            <div class="form-group">
+              <div class="form-label">Vifa 裝置 MAC 位址</div>
+              <input type="text" class="input-field" id="vifaMacInput"
+                placeholder="例：AA:BB:CC:DD:EE:FF"
+                value="">
+            </div>
+
+            <!-- 音量設定 -->
+            <div class="form-group">
+              <div class="form-label">警報音量 <span id="volumeLabel" style="color:var(--accent);font-family:var(--font-mono)">75%</span></div>
+              <input type="range" id="vifaVolume" min="10" max="100" value="75"
+                style="width:100%;accent-color:var(--accent);cursor:pointer"
+                oninput="document.getElementById('volumeLabel').textContent=this.value+'%'">
+            </div>
+
+            <div style="display:flex;gap:.5rem">
+              <button class="btn btn-ghost" onclick="scanVifa()" style="flex:1;justify-content:center">🔍 掃描裝置</button>
+              <button class="btn btn-ghost" onclick="connectVifa()" style="flex:1;justify-content:center">🔗 連線</button>
+              <button class="btn btn-accent" onclick="saveVifa()" style="flex:1;justify-content:center">儲存</button>
+            </div>
+
+            <!-- 警報鈴聲選擇
+                 ╔══════════════════════════════════════════════════════════════╗
+                 ║  🔔 替換警報鈴聲說明                                         ║
+                 ║  若要更換警報音效，有以下兩種方式：                           ║
+                 ║                                                              ║
+                 ║  方式 A — 替換音效檔案（推薦）：                             ║
+                 ║    1. 將新的 .mp3 / .wav / .ogg 放入專案資料夾               ║
+                 ║    2. 修改下方 <option value="..."> 的 value 為新檔名         ║
+                 ║    3. 在 server.py 的 play_vifa_alert() 中                   ║
+                 ║       對應修改 ALERT_SOUNDS 字典內的路徑                      ║
+                 ║                                                              ║
+                 ║  方式 B — 使用 Web Audio API 動態產生音效（無需音效檔）：      ║
+                 ║    1. 找到 playAlertTone() 函式                              ║
+                 ║    2. 調整 oscillator.frequency.value（Hz）改變音調            ║
+                 ║    3. 調整 gainNode.gain 改變音量包絡                         ║
+                 ║    4. 調整重複次數 BEEP_REPEAT_COUNT 改變鳴叫次數             ║
+                 ╚══════════════════════════════════════════════════════════════╝ -->
+            <div class="form-group" style="margin-top:.2rem">
+              <div class="form-label">警報鈴聲類型</div>
+              <select class="input-field" id="alertSoundSelect">
+                <!-- 🔔 在此新增或替換鈴聲選項（value = 音效檔名或類型代號） -->
+                <option value="beep_triple">三連嗶（預設）</option>
+                <option value="siren_short">短促警報聲</option>
+                <option value="chime_alert">提示鈴聲</option>
+                <!-- 範例：換成自訂音效檔 -->
+                <!-- <option value="my_custom_alarm.mp3">自訂音效</option> -->
+              </select>
+            </div>
+
+          </div>
+        </div>
+        <!-- ════════ Vifa 設定卡片 END ════════ -->
+
+
+        <!-- 同步發送規則 -->
         <div class="card">
           <div class="card-header"><div class="card-title">🔁 同步發送規則</div></div>
           <div class="card-body" style="display:flex;flex-direction:column;gap:.6rem">
-            <div style="font-size:.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:.4rem">當偵測到以下事件時，同時透過 Email 與 LINE Bot 通報：</div>
+            <div style="font-size:.82rem;color:var(--text-muted);line-height:1.7;margin-bottom:.4rem">當偵測到以下事件時，同時透過 Email、LINE Bot 與 Vifa 音響通報：</div>
             <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 🔴 吸菸確認（信心度 ≥ 90%）</label>
             <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" checked style="accent-color:var(--accent)"> 🟡 點煙行為（信心度 ≥ 80%）</label>
             <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.85rem"><input type="checkbox" style="accent-color:var(--accent)"> 🔵 疑似違規（信心度 ≥ 60%）</label>
@@ -119,6 +269,44 @@ input:checked+.toggle-slider::before { transform:translateX(20px);background:var
             <button class="btn btn-accent" onclick="saveSyncRules()" style="justify-content:center">儲存同步設定</button>
           </div>
         </div>
+
+
+        <!-- ════════════════════════════════════════════════════════════
+             🚨 整合測試面板
+             按下「全通道測試」後同步執行：
+               1. Email 發送
+               2. LINE Bot 推播
+               3. Vifa 藍牙音響警報音
+             ════════════════════════════════════════════════════════════ -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🚨 整合通知測試</div>
+            <div class="conn-status">
+              <div class="conn-dot conn-ok"></div>
+              <span style="color:var(--text-muted);font-size:.7rem">同步三通道</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="test-panel">
+              <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.7">
+                點擊測試鍵後，系統將同時發出：<br>
+                <span style="color:var(--accent)">📧 Email</span> &nbsp;＋&nbsp;
+                <span style="color:var(--safe)">💬 LINE Bot</span> &nbsp;＋&nbsp;
+                <span style="color:var(--warn)">🔊 Vifa 警報音</span>
+              </div>
+
+              <!-- 主測試按鈕 -->
+              <button class="btn-test-all" id="btnTestAll" onclick="runIntegratedTest()">
+                🚨 全通道整合測試
+              </button>
+
+              <!-- 即時 Log 視窗 -->
+              <div class="test-result-log" id="testLog"></div>
+            </div>
+          </div>
+        </div>
+        <!-- ════════ 整合測試面板 END ════════ -->
+
       </div>
     </div>
 
@@ -130,6 +318,9 @@ injectShell('通知設定');
 
 const SERVER = 'http://localhost:5000';
 
+// ──────────────────────────────────────────
+//  Email 測試 & 儲存
+// ──────────────────────────────────────────
 async function testEmail() {
   showToast('發送測試 Email 中…', 'info');
   const sender = document.querySelector('input[value="smokesentry@school.edu.tw"]')?.value || 'smokesentry@school.edu.tw';
@@ -152,9 +343,11 @@ async function testEmail() {
     showToast('📧 [模擬] 測試 Email（server.py 未執行）', 'warn', 3000);
   }
 }
-
 function saveEmail() { showToast('Email 設定已儲存', 'success'); }
 
+// ──────────────────────────────────────────
+//  LINE Bot 測試 & 儲存
+// ──────────────────────────────────────────
 async function testLine() {
   showToast('發送 LINE Bot 測試訊息中…', 'info');
   const testMsg = `🧪 SmokeSentry LINE Bot 連線測試\n━━━━━━━━━━━━━━\n時間：${new Date().toLocaleString('zh-TW')}\n✅ 連線正常`;
@@ -172,12 +365,265 @@ async function testLine() {
     showToast('💬 [模擬] LINE Bot 測試（server.py 未執行）', 'warn', 3000);
   }
 }
-
 function saveLine() { showToast('LINE Bot 設定已儲存', 'success'); }
+
+// ══════════════════════════════════════════════════════════
+//  🔊 Vifa 藍牙音響 — 連線管理
+// ══════════════════════════════════════════════════════════
+
+/** 更新畫面上的 Vifa 連線狀態 */
+function setVifaStatus(state) {
+  // state: 'connected' | 'disconnected' | 'scanning'
+  const dot   = document.getElementById('vifaConnDot');
+  const label = document.getElementById('vifaConnLabel');
+  const sig   = document.getElementById('vifaSignal');
+  const name  = document.getElementById('vifaDeviceName');
+  const colors = { connected:'var(--safe)', disconnected:'var(--danger)', scanning:'var(--warn)' };
+  const labels = { connected:'已連線', disconnected:'未連線', scanning:'掃描中…' };
+  const dotCls = { connected:'conn-ok', disconnected:'conn-fail', scanning:'conn-warn' };
+  dot.className   = `conn-dot ${dotCls[state]}`;
+  label.textContent = labels[state];
+  label.style.color = colors[state];
+  sig.className = `vifa-signal ${state === 'connected' ? 'connected' : 'disconnected'}`;
+  if (state === 'connected') {
+    const mac = document.getElementById('vifaMacInput').value;
+    name.textContent = mac ? `Vifa (${mac})` : 'Vifa Speaker';
+  } else {
+    name.textContent = state === 'scanning' ? '掃描中…' : '— 尚未配對 —';
+  }
+}
+
+async function scanVifa() {
+  setVifaStatus('scanning');
+  showToast('藍牙掃描中，請確認 Vifa 處於配對模式…', 'info', 3000);
+  try {
+    const res  = await fetch(`${SERVER}/api/vifa/scan`, { method: 'POST' });
+    const data = await res.json();
+    if (data.found) {
+      document.getElementById('vifaMacInput').value = data.mac;
+      showToast(`✅ 找到裝置：${data.name}（${data.mac}）`, 'success', 4000);
+      setVifaStatus('disconnected');
+    } else {
+      showToast('🔍 [模擬] 未找到 Vifa，請確認藍牙已開啟', 'warn', 3000);
+      setVifaStatus('disconnected');
+    }
+  } catch {
+    showToast('🔍 [模擬] 藍牙掃描（server.py 未執行）', 'warn', 3000);
+    setVifaStatus('disconnected');
+  }
+}
+
+async function connectVifa() {
+  const mac = document.getElementById('vifaMacInput').value.trim();
+  if (!mac) { showToast('請先輸入或掃描 Vifa 的 MAC 位址', 'error'); return; }
+  showToast(`連線至 ${mac}…`, 'info');
+  try {
+    const res  = await fetch(`${SERVER}/api/vifa/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setVifaStatus('connected');
+      showToast('🔊 Vifa 藍牙連線成功！', 'success');
+    } else {
+      setVifaStatus('disconnected');
+      showToast(`❌ 連線失敗：${data.error || '未知錯誤'}`, 'error');
+    }
+  } catch {
+    // 模擬成功（server.py 未執行時仍可看效果）
+    setVifaStatus('connected');
+    showToast('🔊 [模擬] Vifa 連線成功（server.py 未執行）', 'warn', 3000);
+  }
+}
+
+function saveVifa() { showToast('Vifa 藍牙音響設定已儲存', 'success'); }
 
 async function saveSyncRules() {
   showToast('同步規則已儲存', 'success');
-  // 可在此呼叫後端儲存設定
+}
+
+// ══════════════════════════════════════════════════════════
+//  🔊 Web Audio API — 本機播放警報音（無需音效檔）
+//
+//  若要替換警報鈴聲，修改以下參數：
+//    BEEP_FREQ_HZ    — 音調（Hz）。440=La，880=高音La，200=低沈警報
+//    BEEP_DURATION   — 每次嗶聲持續時間（秒）
+//    BEEP_GAP        — 嗶聲間隔（秒）
+//    BEEP_REPEAT_COUNT — 重複嗶幾次
+//    oscillator.type — 波形：'sine'|'square'|'sawtooth'|'triangle'
+//
+//  若要改用音效檔（.mp3/.wav），參考下方 playAlertFile() 的說明。
+// ══════════════════════════════════════════════════════════
+
+/* ── 可調參數區 ── */
+const BEEP_FREQ_HZ     = 880;   // 🔔 修改此值改變音調（Hz）
+const BEEP_DURATION    = 0.18;  // 🔔 每聲嗶聲長度（秒）
+const BEEP_GAP         = 0.12;  // 🔔 嗶聲間隔（秒）
+const BEEP_REPEAT_COUNT = 3;    // 🔔 重複次數（三連嗶 = 3）
+
+/**
+ * 用 Web Audio API 在瀏覽器端播放警報音。
+ * 若要換成音效檔，把此函式內容換成：
+ *   const audio = new Audio('your_alarm.mp3');  // 🔔 換成你的音效檔路徑
+ *   audio.volume = volume / 100;
+ *   audio.play();
+ */
+function playAlertTone(volume = 75) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const gainNode = ctx.createGain();
+  gainNode.connect(ctx.destination);
+
+  for (let i = 0; i < BEEP_REPEAT_COUNT; i++) {
+    const osc = ctx.createOscillator();
+    osc.type = 'square';              // 🔔 波形：square=刺耳警報感，sine=柔和，sawtooth=粗糙
+    osc.frequency.value = BEEP_FREQ_HZ;
+    osc.connect(gainNode);
+
+    const start = ctx.currentTime + i * (BEEP_DURATION + BEEP_GAP);
+    const end   = start + BEEP_DURATION;
+
+    gainNode.gain.setValueAtTime(0, start);
+    gainNode.gain.linearRampToValueAtTime(volume / 100, start + 0.01);
+    gainNode.gain.setValueAtTime(volume / 100, end - 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, end);
+
+    osc.start(start);
+    osc.stop(end);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  🚨 整合測試：同步執行 Email + LINE + Vifa 警報音
+// ══════════════════════════════════════════════════════════
+
+function appendLog(msg, cls = 'log-info') {
+  const log = document.getElementById('testLog');
+  log.classList.add('show');
+  const line = document.createElement('div');
+  line.className = cls;
+  const ts = new Date().toLocaleTimeString('zh-TW');
+  line.textContent = `[${ts}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function runIntegratedTest() {
+  const btn = document.getElementById('btnTestAll');
+  btn.disabled = true;
+  btn.textContent = '⏳ 測試中…';
+
+  // 清除舊 log
+  const log = document.getElementById('testLog');
+  log.innerHTML = '';
+  log.classList.add('show');
+
+  appendLog('▶ 整合測試開始', 'log-info');
+
+  // ── 同步並行發送三個通道 ──────────────────────────────
+  const [emailResult, lineResult, vifaResult] = await Promise.allSettled([
+    sendTestEmail(),   // 1️⃣ Email
+    sendTestLine(),    // 2️⃣ LINE Bot
+    sendTestVifa()     // 3️⃣ Vifa 藍牙音響
+  ]);
+
+  // ── 顯示各通道結果 ────────────────────────────────────
+  if (emailResult.status === 'fulfilled') {
+    appendLog(`📧 Email：${emailResult.value}`, 'log-ok');
+  } else {
+    appendLog(`📧 Email 失敗：${emailResult.reason}`, 'log-err');
+  }
+
+  if (lineResult.status === 'fulfilled') {
+    appendLog(`💬 LINE Bot：${lineResult.value}`, 'log-ok');
+  } else {
+    appendLog(`💬 LINE Bot 失敗：${lineResult.reason}`, 'log-err');
+  }
+
+  if (vifaResult.status === 'fulfilled') {
+    appendLog(`🔊 Vifa 音響：${vifaResult.value}`, 'log-ok');
+  } else {
+    appendLog(`🔊 Vifa 音響失敗：${vifaResult.reason}`, 'log-err');
+  }
+
+  appendLog('✓ 測試完成', 'log-info');
+  showToast('🚨 整合測試完成，請查看 Log', 'success', 4000);
+
+  btn.disabled = false;
+  btn.textContent = '🚨 全通道整合測試';
+}
+
+// ── 各通道測試子函式 ──────────────────────────────────────
+
+/** 1️⃣ 發送測試 Email，回傳結果說明字串 */
+async function sendTestEmail() {
+  const sender = document.querySelector('input[type="email"].input-field')?.value
+                 || 'smokesentry@school.edu.tw';
+  try {
+    const res  = await fetch(`${SERVER}/api/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipients: [sender],
+        subject: '【SmokeSentry】🚨 整合測試通知',
+        body: `整合測試\n時間：${new Date().toLocaleString('zh-TW')}\n來源：通知設定頁面整合測試`,
+        urgency: 'high'
+      })
+    });
+    const data = await res.json();
+    return data.simulated ? '[模擬] 記錄完成' : '發送成功 ✓';
+  } catch {
+    return '[模擬] server.py 未執行，跳過';
+  }
+}
+
+/** 2️⃣ 發送 LINE Bot 推播，回傳結果說明字串 */
+async function sendTestLine() {
+  const msg = `🚨 SmokeSentry 整合測試\n━━━━━━━━━━━━━━\n時間：${new Date().toLocaleString('zh-TW')}\n項目：Email + LINE + Vifa 同步測試`;
+  try {
+    const res  = await fetch(`${SERVER}/api/send-line`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, targets: ['U7096788b7ec534ad48ca473335c38aac'] })
+    });
+    const data = await res.json();
+    return data.simulated ? '[模擬] 記錄完成' : '推播成功 ✓';
+  } catch {
+    return '[模擬] server.py 未執行，跳過';
+  }
+}
+
+/**
+ * 3️⃣ Vifa 藍牙音響警報
+ *
+ * 步驟：
+ *   a. 呼叫後端 /api/vifa/alert → server.py 透過 bluetoothctl / PyBluez
+ *      連線 Vifa 並播放警報（需主機已配對藍牙）
+ *   b. 同時在瀏覽器本機播放 Web Audio 音效（即使後端無回應也能聽到）
+ *
+ * 若只想用音效檔替換，參考 playAlertTone() 上方的說明。
+ */
+async function sendTestVifa() {
+  const volume = parseInt(document.getElementById('vifaVolume').value);
+  const sound  = document.getElementById('alertSoundSelect').value;
+  const mac    = document.getElementById('vifaMacInput').value.trim();
+
+  // b. 瀏覽器端立即播放（不等後端）
+  playAlertTone(volume);
+
+  // a. 通知後端透過藍牙觸發音響
+  try {
+    const res  = await fetch(`${SERVER}/api/vifa/alert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac, volume, sound })
+    });
+    const data = await res.json();
+    return data.ok ? `藍牙播放成功（${mac}）✓` : `[模擬] 瀏覽器端已播音`;
+  } catch {
+    return '[模擬] 瀏覽器端已播音，server.py 未執行';
+  }
 }
 </script>
 </body>
