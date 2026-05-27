@@ -457,82 +457,40 @@ async function saveSyncRules() {
 //  若要改用音效檔（.mp3/.wav），參考下方 playAlertFile() 的說明。
 // ══════════════════════════════════════════════════════════
 
-/* ── 終極緊張感參數區 ── */
-const SIREN_LOW_FREQ   = 300;   // 🔔 警報最低音調（拉高基音，避免低音時顯得平穩）
-const SIREN_HIGH_FREQ  = 650;   // 🔔 警報最高音調（拉高到 650Hz，極具穿透力與緊迫感）
-const SIREN_CYCLE_TIME = 0.6;   // 🔔 急速擺動（0.6 秒就上下拉扯一次，創造極度恐慌與緊張感）
-
-let sirenInterval = null;
-let currentOsc = null;
-let currentGainNode = null;
-let audioCtx = null;
+/* ── 可調參數區 ── */
+const BEEP_FREQ_HZ     = 800;   // 🔔 修改此值改變音調（Hz）
+const BEEP_DURATION    = 0.18;  // 🔔 每聲嗶聲長度（秒）
+const BEEP_GAP         = 0.12;  // 🔔 嗶聲間隔（秒）
+const BEEP_REPEAT_COUNT = 3;    // 🔔 重複次數（三連嗶 = 3）
 
 /**
- * 啟動高緊張感防空警報（從最高音瞬間起手、急速擺動）
+ * 用 Web Audio API 在瀏覽器端播放警報音。
+ * 若要換成音效檔，把此函式內容換成：
+ *   const audio = new Audio('your_alarm.mp3');  // 🔔 換成你的音效檔路徑
+ *   audio.volume = volume / 100;
+ *   audio.play();
  */
-function playAlertTone(volume = 85) { // 稍微調高預設音量，增加震撼力
-  if (sirenInterval) return;
+function playAlertTone(volume = 75) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const gainNode = ctx.createGain();
+  gainNode.connect(ctx.destination);
 
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  currentOsc = audioCtx.createOscillator();
-  currentGainNode = audioCtx.createGain();
+  for (let i = 0; i < BEEP_REPEAT_COUNT; i++) {
+    const osc = ctx.createOscillator();
+    osc.type = 'square';              // 🔔 波形：square=刺耳警報感，sine=柔和，sawtooth=粗糙
+    osc.frequency.value = BEEP_FREQ_HZ;
+    osc.connect(gainNode);
 
-  // 使用 'sawtooth' (鋸齒波) 帶有強烈的機械摩擦與撕裂感
-  currentOsc.type = 'sawtooth'; 
-  
-  // 🚀 【關鍵修正】一開始就直接把頻率設定在最高點 (SIREN_HIGH_FREQ)，瞬間破音起手！
-  currentOsc.frequency.setValueAtTime(SIREN_HIGH_FREQ, audioCtx.currentTime);
-  currentGainNode.gain.setValueAtTime(volume / 100, audioCtx.currentTime);
+    const start = ctx.currentTime + i * (BEEP_DURATION + BEEP_GAP);
+    const end   = start + BEEP_DURATION;
+    
+    gainNode.gain.setValueAtTime(0, start);
+    gainNode.gain.linearRampToValueAtTime(volume / 100, start + 0.01);
+    gainNode.gain.setValueAtTime(volume / 100, end - 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, end);
 
-  currentOsc.connect(currentGainNode);
-  currentGainNode.connect(audioCtx.destination);
-  currentOsc.start();
-
-  // 🚀 【關鍵修正】因為從最高點起手，所以第一個下滑目標是「低音點」
-  let isToHigh = false; 
-  currentOsc.frequency.linearRampToValueAtTime(SIREN_LOW_FREQ, audioCtx.currentTime + SIREN_CYCLE_TIME);
-
-  // 每隔固定時間（毫秒）在最高音與最低音之間瘋狂切換
-  sirenInterval = setInterval(() => {
-    const now = audioCtx.currentTime;
-    if (isToHigh) {
-      // 瞬間衝向高音
-      currentOsc.frequency.linearRampToValueAtTime(SIREN_HIGH_FREQ, now + SIREN_CYCLE_TIME);
-    } else {
-      // 急速滑落到低音
-      currentOsc.frequency.linearRampToValueAtTime(SIREN_LOW_FREQ, now + SIREN_CYCLE_TIME);
-    }
-    isToHigh = !isToHigh; // 切換下一次的衝刺目標
-  }, SIREN_CYCLE_TIME * 1000);
-}
-
-/**
- * 停止警報
- */
-function stopAlertSiren() {
-  if (sirenInterval) {
-    clearInterval(sirenInterval);
-    sirenInterval = null;
-
-    const now = audioCtx.currentTime;
-    currentOsc.frequency.cancelScheduledValues(now);
-    currentGainNode.gain.cancelScheduledValues(now);
-
-    // 緊張感警報切斷時，淡出要快（0.4秒），顯得戛然而止、驚魂未定
-    currentGainNode.gain.linearRampToValueAtTime(0, now + 0.4);
-
-    setTimeout(() => {
-      if (currentOsc) {
-        currentOsc.stop();
-        currentOsc.disconnect();
-      }
-      if (audioCtx) {
-        audioCtx.close();
-      }
-      currentOsc = null;
-      currentGainNode = null;
-      audioCtx = null;
-    }, 500);
+    osc.start(start);
+    osc.stop(end);
   }
 }
 // ══════════════════════════════════════════════════════════
