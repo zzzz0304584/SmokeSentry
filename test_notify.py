@@ -17,17 +17,17 @@ from email.mime.multipart import MIMEMultipart
 # ─────────────────────────────────────────────────────
 
 # Gmail SMTP
-SENDER_EMAIL = 'smokesentry.ai.alert@gmail.com'
+SENDER_EMAIL = 'egfg931113@gmail.com'
 APP_PASSWORD  = 'zfjv ngtx nnou nztq'           # Gmail App Password（含空格）
 
 # ⚠️  收件人：填你真正想收到警報信的信箱（可以和寄件人相同）
-RECIPIENT_EMAIL = 'smokesentry.ai.alert@gmail.com'   # ← 換成你要收信的 Email
+RECIPIENT_EMAIL = 'yuju.liu94@gmail.com'
 
 # LINE Messaging API
 # ⚠️  這裡必須填「Long-lived Channel Access Token」
 #     取得方式：https://developers.line.biz/console/
 #       → 選你的 Channel → Messaging API → Channel access token → Issue
-LINE_TOKEN   = ''   # ← 貼上 Long-lived Channel Access Token（很長的字串）
+LINE_TOKEN   = 'CA/ASzaICMBXv6i71UmD0uII8Tw0gExmqVL8XNq9eRXlybfvbayjPEnaOaF36Xwn+T7DYijG1p+y4yaDmF8KQGlv9Wqdgdc7GTOAydeoMRYdxNjmeQzsMKduEvmvsplkftlMehziaoKp7hzTR25TrgdB04t89/1O/w1cDnyilFU='
 LINE_USER_ID = 'U7096788b7ec534ad48ca473335c38aac'
 
 # ─────────────────────────────────────────────────────

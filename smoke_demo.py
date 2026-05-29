@@ -24,8 +24,8 @@ face_mesh = mp_face_mesh.FaceMesh(
 
 # =========================
 # Camera 初始化
-# =========================
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) #目前0是筆電相機，1是外接相機
+# ========================= 
+cap = cv2.VideoCapture(0, cv2.CAP_MSMF)  # 0 是筆電內建鏡頭，1 是外接鏡頭  
 cv2.namedWindow("SmokeSentry Prototype", cv2.WINDOW_NORMAL)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
